@@ -1,0 +1,91 @@
+{
+  "meta": {
+    "note": "Synthetic, fully anonymized observation rows for static rule tests. No real airports, prices, airlines, or booking tokens. Airports use clearly synthetic AAA/ZZZ-style codes; prices are fake currency amounts.",
+    "generated_for": "task-7-static-tests",
+    "network": false
+  },
+  "observations": [
+    {
+      "id": "obs-included-01",
+      "state": "populated",
+      "route": "AAA-ZZZ",
+      "price": "123.45",
+      "currency": "XYZ",
+      "duration": "07:15:00",
+      "baggage": "included"
+    },
+    {
+      "id": "obs-fee-02",
+      "state": "populated",
+      "route": "ZZZ-AAA",
+      "price": "098.70",
+      "currency": "XYZ",
+      "duration": "12:40:00",
+      "baggage": "fee required"
+    },
+    {
+      "id": "obs-fee-03",
+      "state": "populated",
+      "route": "QWE-RTY",
+      "price": "154.20",
+      "currency": "XYZ",
+      "duration": "18:22:11",
+      "baggage": "fee required"
+    },
+    {
+      "id": "obs-unverified-04",
+      "state": "populated",
+      "route": "ASD-FGH",
+      "price": "099.99",
+      "currency": "XYZ",
+      "duration": "19:59:59",
+      "baggage": ""
+    },
+    {
+      "id": "obs-overcap-05",
+      "state": "populated",
+      "route": "JKL-ZXC",
+      "price": "076.50",
+      "currency": "XYZ",
+      "duration": "20:00:00",
+      "baggage": "included"
+    },
+    {
+      "id": "obs-blocked-06",
+      "state": "blocked",
+      "source": "synthetic-frontend-A",
+      "failure": "HTTP 403 provider guard"
+    },
+    {
+      "id": "obs-blocked-07",
+      "state": "blocked",
+      "source": "synthetic-frontend-B",
+      "failure": "CAPTCHA"
+    },
+    {
+      "id": "obs-empty-08",
+      "state": "empty",
+      "route": "VBN-MNB",
+      "note": "no populated results returned"
+    },
+    {
+      "id": "obs-stale-09",
+      "state": "stale",
+      "route": "UIO-QWE",
+      "price": "080.00",
+      "currency": "XYZ",
+      "duration": "09:30:00",
+      "baggage": "unverified",
+      "note": "cached monthly minimum, not an exact-date quote"
+    },
+    {
+      "id": "obs-included-10",
+      "state": "populated",
+      "route": "POI-UYT",
+      "price": "210.00",
+      "currency": "XYZ",
+      "duration": "13:05:00",
+      "baggage": "included"
+    }
+  ]
+}

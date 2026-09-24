@@ -1,0 +1,175 @@
+{
+  "purpose": "Public non-booking release smoke test, not a personal travel request or guaranteed fare",
+  "run_date": "2026-09-23",
+  "contract": {
+    "origin": "ZRH",
+    "destination": "LIS",
+    "outbound_date": "2026-10-01",
+    "return_departure_date": "2026-10-10",
+    "adults": 1,
+    "children": 0,
+    "infants": 0,
+    "cabin": "Economy",
+    "currency": "EUR"
+  },
+  "duration_cap": "strictly under 20:00:00 per direction",
+  "return_date_semantics": "departure from destination, not arrive-home-by deadline",
+  "collection": {
+    "FlightList": {
+      "rendered": 100,
+      "collected": 100,
+      "duration_qualified": 100
+    },
+    "Google Flights": {
+      "completed_itineraries": 1
+    },
+    "eDreams": {
+      "rendered_and_collected": 6,
+      "scope": "initial six rendered cards; not an exhaustive cheapest-fare claim"
+    }
+  },
+  "rows": [
+    {
+      "origin": "ZRH",
+      "destination": "LIS",
+      "outbound_date": "2026-10-01",
+      "return_departure_date": "2026-10-10",
+      "adults": 1,
+      "children": 0,
+      "infants": 0,
+      "cabin": "Economy",
+      "currency": "EUR",
+      "retrieved_at": "2026-09-23T16:59:21+00:00",
+      "evidence": "populated",
+      "source": "FlightList",
+      "source_family": "Kiwi-backed discovery",
+      "source_url": "https://www.flightlist.io/",
+      "price": 387,
+      "quote_state": "list",
+      "airlines": [
+        "easyJet",
+        "Vueling"
+      ],
+      "baggage": "unverified",
+      "outbound": {
+        "departure_airport": "ZRH",
+        "arrival_airport": "LIS",
+        "departure_date": "2026-10-01",
+        "arrival_date": "2026-10-01",
+        "departure_time": "10:55:00",
+        "arrival_time": "12:55:00",
+        "duration": "03:00:00",
+        "stops": 0
+      },
+      "return": {
+        "departure_airport": "LIS",
+        "arrival_airport": "ZRH",
+        "departure_date": "2026-10-10",
+        "arrival_date": "2026-10-11",
+        "departure_time": "19:20:00",
+        "arrival_time": "08:45:00",
+        "duration": "12:25:00",
+        "stops": 1,
+        "connection_airport": "BCN"
+      }
+    },
+    {
+      "origin": "ZRH",
+      "destination": "LIS",
+      "outbound_date": "2026-10-01",
+      "return_departure_date": "2026-10-10",
+      "adults": 1,
+      "children": 0,
+      "infants": 0,
+      "cabin": "Economy",
+      "currency": "EUR",
+      "retrieved_at": "2026-09-23T16:59:21+00:00",
+      "evidence": "populated",
+      "source": "Google Flights",
+      "source_family": "Google Flights",
+      "source_url": "https://www.google.com/travel/flights/booking",
+      "price": 353,
+      "list_price": 355,
+      "quote_state": "repriced",
+      "airlines": [
+        "easyJet",
+        "Vueling"
+      ],
+      "baggage": "fee required",
+      "baggage_evidence": "1st checked bag available for a fee (both directions)",
+      "separate_tickets": true,
+      "outbound": {
+        "departure_airport": "ZRH",
+        "arrival_airport": "LIS",
+        "departure_date": "2026-10-01",
+        "arrival_date": "2026-10-01",
+        "departure_time": "10:55:00",
+        "arrival_time": "12:55:00",
+        "duration": "03:00:00",
+        "stops": 0
+      },
+      "return": {
+        "departure_airport": "LIS",
+        "arrival_airport": "ZRH",
+        "departure_date": "2026-10-10",
+        "arrival_date": "2026-10-11",
+        "departure_time": "19:20:00",
+        "arrival_time": "08:45:00",
+        "duration": "12:25:00",
+        "stops": 1,
+        "connection_airport": "BCN"
+      }
+    },
+    {
+      "origin": "ZRH",
+      "destination": "LIS",
+      "outbound_date": "2026-10-01",
+      "return_departure_date": "2026-10-10",
+      "adults": 1,
+      "children": 0,
+      "infants": 0,
+      "cabin": "Economy",
+      "currency": "EUR",
+      "retrieved_at": "2026-09-23T16:59:21+00:00",
+      "evidence": "populated",
+      "source": "eDreams",
+      "source_family": "eDreams OTA",
+      "source_url": "https://www.edreams.com/travel/#results/type=R;from=ZRH;to=LIS;dep=2026-10-01;ret=2026-10-10",
+      "price": 500,
+      "prime_price_not_ranked": 416,
+      "quote_state": "list",
+      "airlines": [
+        "Swiss International Air Lines"
+      ],
+      "baggage": "unverified",
+      "baggage_evidence": "1 personal item (not checked-bag proof)",
+      "outbound": {
+        "departure_airport": "ZRH",
+        "arrival_airport": "LIS",
+        "departure_date": "2026-10-01",
+        "arrival_date": "2026-10-01",
+        "departure_time": "12:50:00",
+        "arrival_time": "14:45:00",
+        "duration": "02:55:00",
+        "stops": 0
+      },
+      "return": {
+        "departure_airport": "LIS",
+        "arrival_airport": "ZRH",
+        "departure_date": "2026-10-10",
+        "arrival_date": "2026-10-10",
+        "departure_time": "05:55:00",
+        "arrival_time": "09:55:00",
+        "duration": "03:00:00",
+        "stops": 0
+      }
+    }
+  ],
+  "limitations": [
+    "No airline-direct retrieval or checkout performed.",
+    "FlightList and eDreams are list observations, not completed booking quotes.",
+    "Google provider card is aggregator evidence, not an independent airline retrieval.",
+    "No fare is qualified as checked-bag included.",
+    "Source URLs omit opaque session/booking parameters; use the explicit contract to reproduce."
+  ]
+}

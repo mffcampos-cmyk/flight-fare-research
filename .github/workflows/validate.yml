@@ -1,0 +1,70 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Gate the COMMITTED tree before packaging can regenerate/mask anything:
+      # strict mode also fails CI when any planned hand-authored artifact (Codex
+      # AGENTS.md, Claude plugin.json) is absent, instead of printing PENDING.
+      - name: Validate committed copies match canonical (strict)
+        run: python3 scripts/validate.py --strict
+
+      - name: Package generated skill copies
+        run: python3 scripts/package.py
+
+      # Guard against packaging drift: if package.py rewrites any committed
+      # generated copy, its git diff is non-empty and CI must fail so drift
+      # between canonical and the committed copies is never silently masked.
+      - name: Guard against packaging drift on committed copies
+        run: |
+          if ! git diff --exit-code --quiet -- skill integrations/; then
+            echo "::error::package.py modified committed generated copies; commit the generated copies alongside the canonical change instead of relying on CI to regenerate them"
+            git status --porcelain -- skill integrations/
+            exit 1
+          fi
+          echo "No packaging drift: generated copies committed and unchanged."
+
+      - name: Install test dependencies
+        run: python3 -m pip install pytest
+
+      - name: Run static rule tests
+        run: python3 -m pytest tests/ -v
+
+      - name: Secret and booking-token scan
+        run: |
+          # Patterns live here; validate.yml itself is excluded below so the
+          # scanning regexes never match their own literal spellings.
+          PATTERNS="booking_token|kiwi\.com/deep|AKIA[0-9A-Z]{16}|-----BEGIN|sk_live_[0-9a-zA-Z]{16,}|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|AIza[0-9A-Za-z_-]{35}|xox[baprs]-[0-9A-Za-z-]{10,}"
+          # Exclude only this workflow file (it holds the literal patterns) plus
+          # VCS/install/cache dirs; keep the rest of .github scanned.
+          set +e
+          grep -RInE "$PATTERNS" .             --exclude=validate.yml             --exclude-dir=.git --exclude-dir=.hermes --exclude-dir=.pytest_cache             > /tmp/secret-scan-matches.txt 2> /tmp/secret-scan-errors.txt
+          rc=$?
+          set -e
+          if [ "$rc" -eq 1 ]; then
+            echo "Secret scan clean: no secret or booking-token patterns found."
+          elif [ "$rc" -eq 0 ]; then
+            echo "::error::Secret or booking-token pattern found in repository"
+            cat /tmp/secret-scan-matches.txt
+            exit 1
+          else
+            # grep failed (rc not 0/1), so the tree is NOT confirmed clean: a
+            # broken scan must never be reported as a pass.
+            echo "::error::Secret scan failed (grep exit ${rc}); cannot confirm the tree is clean"
+            cat /tmp/secret-scan-errors.txt
+            exit 1
+          fi

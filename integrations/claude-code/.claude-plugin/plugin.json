@@ -1,0 +1,7 @@
+{
+  "name": "flight-fare-research",
+  "description": "Evidence-based live airfare research skill (browser-act-first; no booking).",
+  "version": "1.0.0",
+  "author": { "name": "Flight Fare Research contributors" },
+  "license": "MIT"
+}
