@@ -1,7 +1,9 @@
 # Source support matrix
 
 Status of public and credentialed flight sources, seeded from the verified
-2026-09-20 session findings and mirrored in `skill/references/source-ladder.md`.
+2026-09-20 session findings. Since v1.1.0 each user's live per-run state is kept
+in a local source ledger (`skill/references/source-health.md`); this matrix is
+the published, dated summary and is not regenerated automatically.
 
 > **Status changes over time.** Accessibility is a moving target: a homepage
 > that loads today does not mean its search flow works, and a source blocked
@@ -10,7 +12,24 @@ Status of public and credentialed flight sources, seeded from the verified
 > observations. "Status" reflects automated browser sessions (browser-act /
 > headless Chromium) unless noted.
 
-## Working sources (populated exact-date results)
+## Latest ledger canary (2026-10-03)
+
+Fixed canary contract: ZRH→LIS, 2026-11-02 → 2026-11-09, 1 adult, economy,
+CHF. Engine: **headless** Playwright Chromium (no browser-act). A canary `ok`
+proves the search flow worked that day; its prices are not fare evidence.
+
+| Source | Canary state | Notes |
+|--------|--------------|-------|
+| Google Flights (`?q=` link) | **ok** | Consent declined; form repeated route, dates, 1 adult, economy, CHF; 8 results. |
+| TAP booking engine (deep link) | **ok** | The documented deep-link format still works; 5 direct + 8 connecting outbound priced in CHF (per-direction pricing). |
+| ITA Matrix | **ok** (was untested) | Form submit with native-setter dates; heading repeated route and dates; Complete Trips priced in CHF. |
+| eDreams (`edreams.ch`) | **partial** | Form, calendar and exact results hash worked in CHF; only the summary rendered, no itinerary cards. Re-probe in a headed browser before demoting. |
+| FlightList | **error** | Page loads without a bot wall, but airport autocomplete returned no suggestions. Re-probe in a headed browser before demoting. |
+
+The eDreams and FlightList results may be headless-specific; both worked in
+ordinary browser sessions on 2026-09-23 (below).
+
+## Working sources (populated exact-date results, 2026-09-23)
 
 | Source | Type | Status | Date of observation | Notes |
 |--------|------|--------|---------------------|-------|
@@ -54,7 +73,7 @@ loop retries or install evasion tooling.
 
 | Source | Type | Status | Notes |
 |--------|------|--------|-------|
-| ITA Matrix | Independent fare/schedule cross-check | **Untested** | Form may not commit; search form may not submit successfully. Test per run — do not treat a recent-search card as current evidence. |
+| ITA Matrix | Independent fare/schedule cross-check | **ok on 2026-10-03 canary** | See the latest canary above. Test per run; do not treat a recent-search card as current evidence. |
 | Duffel | Official API | Untested (credentialed) | Requires `DUFFEL_ACCESS_TOKEN`; live offers + ancillary baggage pricing. |
 | Skyscanner API | Official API | Untested (credentialed) | Requires `SKYSCANNER_API_KEY` + partner access. Baggage fields need explicit partner enablement. |
 | Amadeus | Official API | Untested (credentialed) | Flight Offers Search/Price; enterprise products need approved access. |

@@ -115,3 +115,66 @@ def all_unique(names: Iterable[object]) -> bool:
             return False
         seen.add(name)
     return True
+
+
+def _amount(value: object) -> float:
+    """Validate one non-negative money amount; ``None`` (unknown) counts as 0."""
+    if value is None:
+        return 0.0
+    amount = float(value)  # type: ignore[arg-type]
+    if amount != amount or amount < 0:  # NaN or negative
+        raise ValueError("amounts must be non-negative numbers")
+    return amount
+
+
+def route_hack_lower_bound(
+    fare: float,
+    bag_fee: float | None = None,
+    positioning: float | None = None,
+    hotel: float | None = None,
+) -> float:
+    """Lowest possible all-in total for a route-hack candidate.
+
+    Unknown components count as 0 *in the bound only*, so pruning on this
+    bound can never discard a candidate that might still win. Never report
+    the bound as a price.
+
+    >>> route_hack_lower_bound(300, bag_fee=None, positioning=45)
+    345.0
+    """
+    return _amount(fare) + _amount(bag_fee) + _amount(positioning) + _amount(hotel)
+
+
+def prune_by_lower_bound(
+    candidates: Sequence[dict], best_total: float | None
+) -> Tuple[list[dict], list[dict]]:
+    """Split candidates into (kept, pruned) against the best qualified total.
+
+    A candidate is pruned when its lower bound is >= ``best_total``: it cannot
+    strictly beat the current best, so slow airline-direct repricing is
+    skipped. Both lists are ordered cheapest bound first and carry
+    ``lower_bound``; pruned rows also carry ``best_total`` for the log line.
+    Inputs are not mutated. Re-run with the next qualified best when the
+    current best is disqualified, which re-admits candidates automatically.
+    """
+    scored = sorted(
+        (
+            dict(
+                candidate,
+                lower_bound=route_hack_lower_bound(
+                    candidate["fare"],
+                    candidate.get("bag_fee"),
+                    candidate.get("positioning"),
+                    candidate.get("hotel"),
+                ),
+            )
+            for candidate in candidates
+        ),
+        key=lambda row: row["lower_bound"],
+    )
+    if best_total is None:
+        return scored, []
+    best = _amount(best_total)
+    kept = [row for row in scored if row["lower_bound"] < best]
+    pruned = [dict(row, best_total=best) for row in scored if row["lower_bound"] >= best]
+    return kept, pruned

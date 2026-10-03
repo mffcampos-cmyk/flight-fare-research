@@ -20,3 +20,7 @@ Test search ZRH→LIS, Thu 5 Nov → Thu 12 Nov 2026, 1 adult, economy, 1 checke
 - TAP direct link (see `airline-direct.md`) returned Discount/Classic/Plus families; Classic included one bag each way.
 
 These are dated observations for provenance; validate them live before relying on the URLs.
+
+## First ledger canary (2026-10-03, headless Playwright Chromium)
+
+ZRH→LIS 2026-11-02/09, 1 adult, economy, CHF. Google Flights `?q=` link: ok, 8 results. TAP deep link (format in `airline-direct.md`): ok, 5 direct + 8 connecting outbound. ITA Matrix form: ok, Complete Trips in CHF. eDreams.ch (CHF, German UI; button `Flug suchen`, placeholders `Von?`/`Nach?`/`Hinflug`/`Rückflug`): exact results hash plus summary, but no cards rendered (partial). FlightList: autocomplete dead (error). Live state now lives in the local source ledger (see `source-health.md`).

@@ -55,7 +55,9 @@ The standalone body budget is now 1,500–2,600 words to retain working recipes.
 
 ## Requirements
 
-The modular Hermes/Codex/Claude Code package is **browser-act-first**; the standalone Cowork card is not. Install and configure `browser-act` in the host environment before running rendered, interactive flight searches. See `skill/references/browser-act-support.md` for environment setup and session handling.
+The modular Hermes/Codex/Claude Code package **prefers `browser-act`** for rendered, interactive flight searches; when the CLI is not installed it falls back to the host's own browser tool under the same consent, verification and one-attempt rules. The standalone Cowork card uses Cowork's native browser. See `skill/references/browser-act-support.md` for browser-act environment setup and session handling.
+
+The optional source health check (`skill/scripts/source_ledger.py`, Python standard library only) keeps a local status ledger outside the skill folder (`$FFR_LEDGER`, else `$XDG_STATE_HOME` or `~/.local/state/flight-fare-research/`). The ledger holds raw probe evidence and must not be committed. See `skill/references/source-health.md`.
 
 ## Capability boundary
 
