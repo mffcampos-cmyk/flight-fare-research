@@ -67,21 +67,11 @@ Do not rank an OTA teaser above airline-direct unless the exact itinerary surviv
 - **AZair** (`azair.eu`) — loads without a bot wall; scope is low-cost carriers only (Europe/Mediterranean/Asia). Good for LCC route-hack discovery, cannot answer long-haul networks. See `references/azair-browser.md`.
 - **FlightsFinder** — renders, but is a wrapper that re-aggregates Google Flights, KAYAK, Skyscanner and Momondo; NOT an independent backend. Do not count it as a separate source family.
 
-## Last-seen public-frontend accessibility (hints, not current)
+## Current accessibility: the source ledger
 
-A "last seen" snapshot, not a guarantee. Recheck sources once per run before depending on them; a homepage loading does not prove the search flow works. Detailed dated failure modes (KAYAK, Momondo, Skyscanner, Expedia, Kiwi direct, Orbitz, Priceline, CheapOair, Decolar, eSky, JetRadar, Airwander, PanFlights, Star Alliance, Wego, Jetcost, Trip.com) are archived in `historical-observations.md`.
+Do not keep a hand-written status table here. Live per-source state (ok / partial / blocked / empty / error, with timestamps, evidence and inventory family) lives in the local source ledger (outside the skill folder; path rules in `source-health.md`), maintained by `scripts/source_ledger.py` via the canary probes in `source-health.md`. Run `source_ledger.py status` and `order` instead of trusting memory. Its seed rows came from the dated observations archived in `historical-observations.md` (2026-09-20/23), which also keep the detailed failure modes for KAYAK, Momondo, Skyscanner, Expedia, Kiwi direct, Orbitz, Priceline, CheapOair, Decolar, eSky, JetRadar, Airwander, PanFlights, Star Alliance, Wego, Jetcost and Trip.com.
 
-| Source | Last-seen status | Date |
-|---|---|---|
-| Google Flights | Populated exact-date results (user-observed) | 2026-09-23 |
-| TAP booking engine | Exact-date fare families with bag (user-observed) | 2026-09-23 |
-| eDreams | Populated exact-date results (repo test) | 2026-09-23 |
-| FlightList | Populated discovery cards (prior run) | 2026-09-20 |
-| KAYAK / Kiwi direct / Orbitz / Priceline | Explicit bot/403/human-check block | 2026-09-20 |
-| CheapOair / Decolar | Empty rendered content | 2026-09-20 |
-| AZair | Loaded; LCC discovery scope only | 2026-09-20 |
-
-Untested sources stay untested.
+Untested sources stay untested until probed.
 
 Make one attempt per source per run. When the block is explicit, record the source and failure mode, then move on. Do not install or configure stealth fingerprints, TLS rotation, proxy rotation, automated CAPTCHA solving, or similar anti-detection services merely to obtain a fare; use official APIs, airline-direct engines, alternate aggregators, or a user-visible manual path instead. Do not cite indexed snippets as exact-date results. Re-test on a future run because accessibility can change; a homepage loading today does not mean its search flow works.
 
