@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1]
+
+- FlightList recipe: easyAutocomplete only reacts to keyup events with a real `keyCode`. Synthetic key events without one look like a dead autocomplete.
+- eDreams recipe: Swiss-German consent decline is the `Weiter ohne Zustimmung` link; itinerary cards may render only after the "show more results" button.
+- Headed re-probe (2026-10-03): FlightList and eDreams ok. The v1.1.0 headless `error`/`partial` states were recipe gaps, not headless blocks. Matrix, `source-health.md` and `historical-observations.md` corrected.
+
 ## [1.1.0]
 
 - Source health check: `skill/scripts/source_ledger.py` (standard library only) records one fixed canary search per core source (`ok`, `partial`, `blocked`, `empty`, `error`), flags stale or untested sources (> 7 days), and prints the ladder order for the run. The ledger is local runtime state outside the skill tree and is never committed. Runbook: `skill/references/source-health.md`. Pattern adapted from Agent-Reach's `doctor`.
@@ -8,7 +14,7 @@
 - Lead-discovery tiers (`skill/references/lead-discovery.md`): keyless web search fan-out, Jina Reader for official policy pages, an optional Perplexity fast/default tier when a key is already configured, and community posts as historical reports only (no cookies or proxies).
 - Browser engine: browser-act preferred, host browser tool fallback when the CLI is absent.
 - Variable trip lengths: separate outbound and return date ranges no longer imply approval of every Cartesian pairing; confirm or pin a target length first.
-- First ledger canary (2026-10-03, headless Chromium): Google Flights, TAP direct and ITA Matrix ok; eDreams partial; FlightList error (see `docs/source-support-matrix.md`).
+- First ledger canary (2026-10-03, headless Chromium): Google Flights, TAP direct and ITA Matrix ok; eDreams partial and FlightList error, later corrected in 1.1.1.
 - Cowork card: pruning rule and lead-discovery guidance (no script).
 
 ## [1.0.0]

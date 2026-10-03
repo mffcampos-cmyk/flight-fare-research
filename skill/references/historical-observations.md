@@ -24,3 +24,7 @@ These are dated observations for provenance; validate them live before relying o
 ## First ledger canary (2026-10-03, headless Playwright Chromium)
 
 ZRH→LIS 2026-11-02/09, 1 adult, economy, CHF. Google Flights `?q=` link: ok, 8 results. TAP deep link (format in `airline-direct.md`): ok, 5 direct + 8 connecting outbound. ITA Matrix form: ok, Complete Trips in CHF. eDreams.ch (CHF, German UI; button `Flug suchen`, placeholders `Von?`/`Nach?`/`Hinflug`/`Rückflug`): exact results hash plus summary, but no cards rendered (partial). FlightList: autocomplete dead (error). Live state now lives in the local source ledger (see `source-health.md`).
+
+## Headed re-probe (2026-10-03, system Chromium, same canary)
+
+Both earlier failures were recipe gaps. FlightList: ok once key events carried a real `keyCode`; 100 cards, all on the exact dates in CHF. eDreams.ch: ok after declining consent via the `Weiter ohne Zustimmung` link and clicking `Weitere 30 Ergebnisse anzeigen`; 6 cards with both directions, hand-baggage labels, and struck regular vs Prime price. Headless Chromium was not shown to be the cause.
