@@ -23,11 +23,11 @@ proves the search flow worked that day; its prices are not fare evidence.
 | Google Flights (`?q=` link) | **ok** | Consent declined; form repeated route, dates, 1 adult, economy, CHF; 8 results. |
 | TAP booking engine (deep link) | **ok** | The documented deep-link format still works; 5 direct + 8 connecting outbound priced in CHF (per-direction pricing). |
 | ITA Matrix | **ok** (was untested) | Form submit with native-setter dates; heading repeated route and dates; Complete Trips priced in CHF. |
-| eDreams (`edreams.ch`) | **partial** | Form, calendar and exact results hash worked in CHF; only the summary rendered, no itinerary cards. Re-probe in a headed browser before demoting. |
-| FlightList | **error** | Page loads without a bot wall, but airport autocomplete returned no suggestions. Re-probe in a headed browser before demoting. |
+| eDreams (`edreams.ch`) | **ok** (headed re-probe) | Headless run showed only the summary. Headed re-probe: declined consent via the `Weiter ohne Zustimmung` link, clicked `Weitere 30 Ergebnisse anzeigen`, and 6 full cards rendered (both directions, baggage labels, regular vs Prime price, CHF). |
+| FlightList | **ok** (headed re-probe) | Headless run found no autocomplete. Cause: synthetic key events without `keyCode`, which easyAutocomplete ignores. With real key codes: 100 cards, all on the exact dates, CHF. |
 
-The eDreams and FlightList results may be headless-specific; both worked in
-ordinary browser sessions on 2026-09-23 (below).
+Both first-run failures were automation recipe gaps, now documented in the
+per-source browser references. They were not headless blocks or site failures.
 
 ## Working sources (populated exact-date results, 2026-09-23)
 

@@ -1,7 +1,7 @@
 ---
 name: flight-fare-research
 description: "Use when researching live airfare and route hacks."
-version: 1.1.0
+version: 1.1.1
 author: hermes-curator
 license: MIT
 platforms: [linux, macos, windows]

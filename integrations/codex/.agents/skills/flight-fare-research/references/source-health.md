@@ -62,4 +62,4 @@ export PATH=<node-bin>:$PATH; npx -y playwright@latest install chromium     # ~/
 pgrep -f 'chrome.*[f]fr-probe-profile' | xargs -r kill
 ```
 
-**Headless caveat (first canary, 2026-10-03):** Google Flights, TAP deep link and ITA Matrix all passed in headless Chromium. FlightList's autocomplete returned nothing (`error`). eDreams.ch showed the summary but no itinerary cards (`partial`). Re-probe those two in a headed or real-profile Chrome before treating them as dead, and say which engine produced each state in `--evidence`.
+**Recipe gap before engine blame (first canary, 2026-10-03):** the headless run recorded FlightList `error` (no autocomplete) and eDreams `partial` (summary, no cards). A headed re-probe showed both were automation gaps, not site or headless failures. Synthetic key events lacked a `keyCode` (see `flightlist-browser.md`). eDreams renders cards only after its "show more results" button (see `edreams-browser.md`). Before recording `error`/`partial`, check the per-source recipe. Say which engine produced each state in `--evidence`.

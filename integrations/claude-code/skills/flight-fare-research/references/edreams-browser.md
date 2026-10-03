@@ -10,7 +10,11 @@ is unusable to pre-seed — always drive the form.
 
 ## Working form flow
 
-1. Decline non-essential cookies (`Continue without agreeing` or equivalent). Identify the visible **main flight-search form** — the one that pairs `Where to?` with a `Search Flights` submit — and scope ALL field lookup inside it, because `Where from?` matches two inputs (a Prime "flight deals" widget lower on the page also matches; typing there does nothing). Prefer the form that contains `Departure` and `Return` beside `Where from?` / `Where to?`. Reject any match outside the main form.
+1. Decline non-essential cookies (`Continue without agreeing` or equivalent; on
+   the Swiss-German `edreams.ch` banner this is the `Weiter ohne Zustimmung →` link,
+   a span rather than a button, so search all clickable text in the consent host).
+   The banner can appear late and silently swallow form clicks; confirm it is gone
+   before typing. Identify the visible **main flight-search form** — the one that pairs `Where to?` with a `Search Flights` submit — and scope ALL field lookup inside it, because `Where from?` matches two inputs (a Prime "flight deals" widget lower on the page also matches; typing there does nothing). Prefer the form that contains `Departure` and `Return` beside `Where from?` / `Where to?`. Reject any match outside the main form.
 2. Origin: type `ZRH`, wait ~2s for autocomplete, then click the suggestion item
    whose text contains the airport name AND code (e.g. `Zurich Airport` + `ZRH`).
    Verify the field now reads `Zurich Airport` (city name, not code) before continuing.
@@ -49,6 +53,11 @@ is unusable to pre-seed — always drive the form.
 
 ## Reading results
 
+- Itinerary cards may not render until you click the list's "show more" button
+  (`Weitere N Ergebnisse anzeigen` on edreams.ch). Click it once as part of the
+  bounded fallback below, then scroll. Verified 2026-10-03: before the click only
+  the Top/Cheapest/Fastest summary showed; after it, full cards rendered with both
+  directions, baggage labels, and struck regular vs Prime prices.
 - After submitting, wait for the summary bar and inspect populated itinerary
   cards in the rendered main content. If only the summary is exposed, try the
   desired ranking tab (`Cheapest` / `Best` / `Fastest`) and one bounded scroll,

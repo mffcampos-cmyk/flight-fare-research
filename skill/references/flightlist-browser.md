@@ -11,6 +11,15 @@ suggestion. Verify `#from-data` and `#to-data` equal `airport:<IATA>` before
 searching. If suggestions do not appear after a bounded wait, delete and retype
 the last character once; if still absent, record failure instead of guessing.
 
+The suggestions come from the easyAutocomplete plugin, which loads data only on
+a keyup whose `keyCode` is above 40 (or Backspace). Pasting text, setting
+`value`, or inserting text does not trigger it. Neither do synthetic key events
+without a key code, for example a CDP `Input.dispatchKeyEvent` that omits
+`windowsVirtualKeyCode`. Type real keys, or send each character's virtual key
+code (`Z`=90, `R`=82, `H`=72). This was verified on 2026-10-03: with key codes,
+`ZRH`/`LIS` resolved to `airport:ZRH`/`airport:LIS`. Without them no suggestion
+appeared, which looks like a dead site but is a recipe error.
+
 ## Setting the date range (the working method)
 
 Try normal calendar interaction first: for each exact date, select the day
