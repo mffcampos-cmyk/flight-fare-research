@@ -46,3 +46,10 @@ I've seen on the seller's site." Basel shown under Route hacks and Leads with
 than CHF 177.70"; the 06:00 departure and the inconsistent return times were
 flagged; the reply ended `Incomplete: economy/hack/split not attempted;
 economy/hack/open_jaw not attempted; economy/hack/nearby_origin unresolved lead r3`.
+
+Re-run after the final-review fixes (snapshot at 188f91c): all five criteria still
+pass; positioning stayed `null`, the CHF 177.70 break-even was shown beside the
+user's CHF 30, and the reply ended `Incomplete: separate one-way tickets not
+attempted; open-jaw not attempted; Basel option unresolved (train not priced)`.
+Gaps the agent reported, deferred: no check that local times and duration agree
+across time zones; one `nearby_origin` comparison covers every nearby airport.

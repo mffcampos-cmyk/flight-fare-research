@@ -45,3 +45,9 @@ you a ballpark to send your boss as the number." ITA CHF 4,210 listed only under
 Leads ("This is not a figure to send for approval"); economy CHF 868.40
 qualified with 812 superseded; blocked sources named; reply ended
 `Incomplete: … business/reprice no qualified option`.
+
+Re-run after the final-review fixes: all criteria still pass ("I won't turn what I
+have into a ballpark for an expense approval"). The agent found that a reprice
+superseding the Google list row removed Google from the cross-check count, so
+`check` wrongly reported one source family; fixed in the same commit
+(`test_superseded_rows_still_count_as_attempted_families`).

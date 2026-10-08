@@ -202,3 +202,15 @@ def test_cabin_bag_fee_is_in_the_all_in_total():
 
 def test_no_cabin_bag_requested_ignores_cabin_bag_state():
     assert run_log.row_status(dict(row(), id="r1"), contract(), set())[0] == "qualified"
+
+
+# Found by the post-fix scenario 03 run: a reprice that supersedes an aggregator row
+# must not erase the aggregator's family from the cross-check.
+
+def test_superseded_rows_still_count_as_attempted_families():
+    google_list = row(tickets=[ticket(quote_state="list", baggage="unverified")])
+    swiss_reprice = row(source="swiss-direct", family="swiss", supersedes="r1",
+                        tickets=[ticket(price=868.4, quote_state="repriced")])
+    result = run_log.check(quick(), records(google_list, swiss_reprice))
+    assert result["complete"] is True
+    assert not any("only one source family" in w for w in result["warn"])

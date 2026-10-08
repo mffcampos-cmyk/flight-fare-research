@@ -609,7 +609,8 @@ def _plural_families(n: int) -> str:
 def cell_states(contract: dict, records: list[dict]) -> list[dict]:
     """Open/done/resolved state of every expected comparison."""
     cells = contract.get("cells") or build_cells(contract)
-    evaluated = [e for e in evaluate(contract, records) if e["status"] != "superseded"]
+    every = evaluate(contract, records)  # superseded rows still prove a family was searched
+    evaluated = [e for e in every if e["status"] != "superseded"]
     ranked = rank(contract, records)
     pruned = {lead["id"]: lead["pruned"] for v in ranked.values() for lead in v["leads"]}
     resolutions = {}
@@ -627,7 +628,7 @@ def cell_states(contract: dict, records: list[dict]) -> list[dict]:
         elif cell.get("auto"):
             state, why = "resolved", f"{cell['auto']['as']}: {cell['auto']['reason']}"
         elif cell["kind"] == "crosscheck":
-            n = len({e["row"].get("family") for e in in_cabin})
+            n = len({e["row"].get("family") for e in every if e["cabin"] == cab})
             state, why = ("done", "") if n >= 2 else ("open", _plural_families(n))
             in_cell = in_cabin
         elif cell["kind"] == "reprice":
@@ -652,7 +653,7 @@ def check(contract: dict, records: list[dict]) -> dict:
     """Is the run complete? Lists open comparisons, closed-without-result cells and warnings."""
     states = cell_states(contract, records)
     warn = []
-    evaluated = [e for e in evaluate(contract, records) if e["status"] != "superseded"]
+    every = evaluate(contract, records)
     cur = contract["currency"]
     for cab, v in rank(contract, records).items():
         for lead in v["leads"]:
@@ -665,8 +666,8 @@ def check(contract: dict, records: list[dict]) -> dict:
                             f"(LB {lead['lower_bound']:.2f} < {v['best']:.2f})")
         if v["best"] is None and v["leads"]:
             warn.append(f"{cab}: no qualified option; {len(v['leads'])} lead(s) unverified")
-        families = sorted({e["row"].get("family") for e in evaluated
-                           if e["cabin"] == cab and e["status"] != "attempt"})
+        families = sorted({e["row"].get("family") for e in every
+                           if e["cabin"] == cab and e["row"].get("outcome", "populated") == "populated"})
         if not families:
             warn.append(f"{cab}: no source family returned results")
         elif len(families) == 1:
