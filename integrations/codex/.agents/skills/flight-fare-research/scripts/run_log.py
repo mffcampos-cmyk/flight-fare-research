@@ -436,6 +436,76 @@ def lower_bound(row: dict, contract: dict) -> float:
     return _sum_parts(row, normalize_contract(contract))
 
 
+def risk_flags(row: dict, contract: dict) -> list[str]:
+    """Practicality flags shown beside a ranked option (not gates)."""
+    dirs = row.get("directions") or []
+    components = row.get("components") or {}
+    flags = []
+    label = row.get("cabin_label") or ""
+    if "+" in label:
+        flags.append(f"mixed cabin: {label}")
+    if any(d.get("airport_change") for d in dirs):
+        flags.append("airport change")
+    if any(str(d.get("arr") or "")[:10] > str(d.get("dep") or "")[:10] for d in dirs if d.get("arr") and d.get("dep")):
+        flags.append("next-day arrival")
+    if len(row.get("tickets") or []) > 1:
+        flags.append("separate tickets")
+    if any((d.get("stops") or 0) >= 2 for d in dirs):
+        flags.append("2+ stops")
+    if any(d.get("self_transfer") for d in dirs):
+        flags.append("self-transfer")
+    flags.extend(name for name in ("positioning", "hotel") if name in components)
+    return flags
+
+
+def _row_id_key(row_id: str):
+    return int(row_id[1:]) if row_id[1:].isdigit() else 0
+
+
+def _travel_key(row: dict) -> tuple[int, int]:
+    seconds, stops = [], 0
+    for d in row.get("directions") or []:
+        try:
+            seconds.append(duration_to_seconds(d.get("duration")))
+        except ValueError:
+            pass
+        stops += d.get("stops") or 0
+    return max(seconds, default=0), stops
+
+
+def evaluate(contract: dict, records: list[dict]) -> list[dict]:
+    """Status, totals and flags for every row record, in log order."""
+    superseded = _superseded(records)
+    out = []
+    for r in records:
+        if r.get("type") != "row":
+            continue
+        status, reasons = row_status(r, contract, superseded)
+        priced = status in ("qualified", "lead")
+        out.append({"id": r["id"], "cabin": r.get("cabin"), "cell": row_cell_id(r), "status": status,
+                    "reasons": reasons,
+                    "all_in": all_in(r, contract) if status == "qualified" else None,
+                    "lower_bound": lower_bound(r, contract) if priced else None,
+                    "flags": risk_flags(r, contract) if priced else [], "row": r})
+    return out
+
+
+def rank(contract: dict, records: list[dict], cabin: str | None = None) -> dict:
+    """Qualified options by all-in total, and leads with their pruning state, per cabin."""
+    evaluated = evaluate(contract, records)
+    cabins = [cabin] if cabin else list(contract["cabins"])
+    result = {}
+    for cab in cabins:
+        qualified = sorted((e for e in evaluated if e["cabin"] == cab and e["status"] == "qualified"),
+                           key=lambda e: (e["all_in"], *_travel_key(e["row"]), _row_id_key(e["id"])))
+        best = qualified[0]["all_in"] if qualified else None
+        leads = sorted((dict(e, pruned=best is not None and e["lower_bound"] >= best)
+                        for e in evaluated if e["cabin"] == cab and e["status"] == "lead"),
+                       key=lambda e: (e["lower_bound"], _row_id_key(e["id"])))
+        result[cab] = {"best": best, "qualified": qualified, "leads": leads}
+    return result
+
+
 # --------------------------------------------------------------------------- storage
 
 def resolve_run_dir(arg: str | None) -> str:
@@ -530,6 +600,46 @@ def cmd_add(args) -> int:
     return EXIT_OK
 
 
+def _public(entry: dict) -> dict:
+    row = entry["row"]
+    out = {k: v for k, v in entry.items() if k != "row"}
+    out.update({"source": row.get("source"), "family": row.get("family"), "url": row.get("url"),
+                "retrieved_at": row.get("retrieved_at"), "hack": row.get("hack"),
+                "booking_urls": [t.get("booking_url") for t in row.get("tickets") or [] if t.get("booking_url")]})
+    return out
+
+
+def cmd_rank(args) -> int:
+    contract, records = load_run(resolve_run_dir(args.run))
+    if args.cabin and args.cabin not in contract["cabins"]:
+        raise UsageError(f"cabin {args.cabin} is not in this run's contract")
+    ranked = rank(contract, records, args.cabin)
+    if args.json:
+        print(json.dumps({cab: {"best": v["best"], "qualified": [_public(e) for e in v["qualified"]],
+                                "leads": [_public(e) for e in v["leads"]]} for cab, v in ranked.items()},
+                         indent=2, ensure_ascii=False))
+        return EXIT_OK
+    cur = contract["currency"]
+    for cab, v in ranked.items():
+        print(f"== {cab}: qualified (all-in {cur})")
+        for n, e in enumerate(v["qualified"], 1):
+            row = e["row"]
+            hack = f" [{row['hack']}]" if row.get("hack") else ""
+            flags = f"  flags: {', '.join(e['flags'])}" if e["flags"] else ""
+            print(f"  {n}. {e['id']}{hack} {e['all_in']:.2f} {row.get('source')} {row.get('retrieved_at')}{flags}")
+        if not v["qualified"]:
+            print("  (none)")
+        print(f"== {cab}: leads (not verified; lower bound, never a price)")
+        for e in v["leads"]:
+            row = e["row"]
+            hack = f" [{row['hack']}]" if row.get("hack") else ""
+            pruned = f"  pruned: LB {e['lower_bound']:.2f} >= best {v['best']:.2f}" if e["pruned"] else ""
+            print(f"  {e['id']}{hack} LB {e['lower_bound']:.2f}: {'; '.join(e['reasons'])}{pruned}")
+        if not v["leads"]:
+            print("  (none)")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -541,6 +651,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--row", required=True, help="row JSON file, or - for stdin")
     p.add_argument("--run", help="run directory (default: most recent run)")
     p.set_defaults(func=cmd_add)
+    p = sub.add_parser("rank", help="qualified options by all-in total, then leads")
+    p.add_argument("--run", help="run directory (default: most recent run)")
+    p.add_argument("--cabin", help="only this cabin")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_rank)
     return parser
 
 
