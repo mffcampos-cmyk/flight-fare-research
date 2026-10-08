@@ -6,9 +6,7 @@ Choose sources by evidentiary value, not by brand count. A populated exact-date 
 
 Check available connectors first: which are present, connected, authorized, support exact-date flight shopping, and what coverage/currency/baggage/freshness they expose. Kiwi.com, Expedia, lastminute.com are possible integrations, not installed dependencies; never assume connected. Prefer a capable connected connector; a blocked public site does not establish connector failure. Record backend relationships, not app-name counts.
 
-**Quick path:** Google Flights `?q=` link (or a connected search), airline-direct qualification, one independent OTA cross-check, one practical nearby-airport check. Skip FlightList, ITA Matrix, other cabins and the full route-hack matrix.
-
-**Full path:** the ladder below, plus FlightList discovery, rolling matched pairs, the full route-hack matrix and stopover construction.
+Which comparisons a quick or full run needs is set at intake (`intake.md`) and tracked by `run_log.py coverage`. The quick path uses Google Flights (or a connected search), airline-direct qualification and one independent cross-check; FlightList, ITA Matrix and the hack matrix belong to the full path.
 
 ## Default no-credential ladder
 
@@ -16,21 +14,7 @@ Check available connectors first: which are present, connected, authorized, supp
 
 Use `https://www.flightlist.io/` when the task has many date combinations, nearby gateways, cabin classes, a duration cap, or checked-bag requirements. Its rendered form supports date ranges, return trips, economy/premium/business/first, currencies, stop limits, maximum duration, self-transfer inclusion/exclusion, and 0–2 checked bags.
 
-Browser recipe:
-
-1. Fill `#from-input` and `#to-input`, wait for each `.eac-item`, click the exact airport/city suggestion, and verify `#from-data` / `#to-data` contain the intended `airport:<IATA>` or `city:<IATA>` value.
-2. Set `#type`, `#class`, `#currency`, `#checkedbags`, `#sort`, `#stops`, and `#connections` explicitly. Use `connections=false` when separate-ticket self-transfers are outside the contract. Browser examples in the Google and ITA references use helper function names (`js()`, `cdp()`) that exist in some test harnesses; with the browser-act CLI, replace `js(x)` with `browser-act --session SESSION eval x`, `eval-el`/`wait`, and obtain accessibility input via `state` plus `input --selector`/`keys`, not a CDP shortcut. Confirm the actual page DOM rather than assuming the helper list.
-3. Set both date ranges. With daterangepicker, update each instance and click its own Apply button; otherwise use the calendar. Re-read both picker start/end values and verify populated itinerary dates, because visible labels can stay stale. Exact-date checks require start=end separately for departure and return.
-4. Set `#duration` as a discovery ceiling, then still parse every returned direction yourself. FlightList can return a journey equal to the ceiling, so a strict `<20:00:00` contract must reject exactly `20:00:00`.
-5. Click `#submit` and wait for populated `li.flight` cards. Save the query contract, retrieval time, and raw card text because the URL does not encode the search state.
-6. Expand a card via `a[data-toggle="collapse"]` to expose airlines, flight numbers, segment times, layovers, and the `Book Flight` deep link.
-
-Limitations:
-
-- FlightList currently hands booking off to Kiwi and uses Kiwi-hosted airline assets. Treat it as a Kiwi-backed independent discovery family, not as an airline-direct quote.
-- The checked-bag selector and the Kiwi `searchBags` deep-link parameter are candidate filters, not proof that the displayed total includes the required bag. Reprice the candidate at checkout or in the airline fare family.
-- A result card can omit airport-change wording visible only after expansion. Inspect all segments and airport codes.
-- Never call a FlightList result bookable when the Kiwi handoff is blocked or reprices.
+Form settings, date pickers, result parsing and limitations: `flightlist-browser.md`. FlightList hands booking off to Kiwi, so it is one Kiwi-backed discovery family; its checked-bag filter is a candidate signal, not baggage proof.
 
 ### 2. Google Flights: exact grid and completion
 
@@ -73,7 +57,7 @@ Do not keep a hand-written status table here. Live per-source state (ok / partia
 
 Untested sources stay untested until probed.
 
-Make one attempt per source per run. When the block is explicit, record the source and failure mode, then move on. Do not install or configure stealth fingerprints, TLS rotation, proxy rotation, automated CAPTCHA solving, or similar anti-detection services merely to obtain a fare; use official APIs, airline-direct engines, alternate aggregators, or a user-visible manual path instead. Do not cite indexed snippets as exact-date results. Re-test on a future run because accessibility can change; a homepage loading today does not mean its search flow works.
+Make one attempt per source per run and follow the challenge steps in `browser-engines.md` when a site blocks you. Cite only populated exact-date pages, never indexed snippets. Re-test on a future run because accessibility changes; a homepage loading today does not mean its search flow works.
 
 ## Credentialed official APIs
 

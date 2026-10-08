@@ -33,7 +33,7 @@ screenshots. These are dated user-observed behaviors, not stable API promises.
 1. Decline non-essential cookies; load the airline direct-search or a documented deep link.
 2. Set origin, destination, dates, travelers, and cabin explicitly; verify the rendered itinerary repeats the route, dates, and passenger count.
 3. Record per-direction and round-trip totals, currency, fare family name, and explicit checked-bag state (pieces or first-bag price).
-4. If baggage is shown as a range with a zero lower bound (e.g. `CHF 0–104`), the allowance and amount are **unverified** — not "included", not a proven mandatory fee (issue 2.4). Reprice to a family with an explicit bag line before ranking.
+4. If baggage is shown as a range with a zero lower bound (e.g. `CHF 0–104`), the allowance and amount are **unverified**: not included, not a proven fee. Reprice to a family with an explicit bag line before ranking.
 5. Compare the cheapest bag-inclusive family against base + explicit bag fee; recommend the lower qualifying total and show the baggage state beside the price.
 
 ## Honesty

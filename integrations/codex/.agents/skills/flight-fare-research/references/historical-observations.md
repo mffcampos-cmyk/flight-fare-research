@@ -28,3 +28,36 @@ ZRH→LIS 2026-11-02/09, 1 adult, economy, CHF. Google Flights `?q=` link: ok, 8
 ## Headed re-probe (2026-10-03, system Chromium, same canary)
 
 Both earlier failures were recipe gaps. FlightList: ok once key events carried a real `keyCode`; 100 cards, all on the exact dates in CHF. eDreams.ch: ok after declining consent via the `Weiter ohne Zustimmung` link and clicking `Weitere 30 Ergebnisse anzeigen`; 6 cards with both directions, hand-baggage labels, and struck regular vs Prime price. Headless Chromium was not shown to be the cause.
+
+## Blocked public frontends (2026-09-20, automated browser)
+
+| Source | Failure mode |
+|---|---|
+| KAYAK | search URL redirects to `/help/bots.html` (retested) |
+| Momondo | dedicated bot page |
+| Skyscanner | person-or-robot CAPTCHA |
+| Expedia | bot challenge |
+| Kiwi (direct) | HTTP 403 / navigation failure (retested) |
+| Trip.com | provider guard |
+| Wego | Cloudflare block |
+| Jetcost | Cloudflare block |
+| PanFlights | HTTP 403 |
+| Star Alliance booking | HTTP 403 |
+| Orbitz | "Bot or Not?" human check |
+| Priceline | press-and-hold "confirm you are a human" wall |
+| CheapOair | empty DOM headless |
+| Decolar | title loads, body empty |
+| eSky | "Access Denied" |
+| JetRadar | TLS certificate error (`ERR_CERT_COMMON_NAME_INVALID`) |
+| Airwander | DNS failure; site appears defunct |
+
+FlightsFinder rendered but re-aggregates Google Flights, KAYAK, Skyscanner and
+Momondo: not an independent family.
+
+## Release smoke test (2026-09-23, ZRH–LIS 1–10 Oct 2026, 1 adult, economy, EUR)
+
+| Source | Result |
+|---|---|
+| FlightList | 100 exact-date cards; both durations parsed, all under a 20-hour cap; list fares, bags unverified |
+| Google Flights | completed provider card €353 (list €355), easyJet + Vueling on separate tickets; bag fee required; return arrives 11 Oct |
+| eDreams | six exact-date cards; sample SWISS regular €500 vs Prime €416; bags unverified |

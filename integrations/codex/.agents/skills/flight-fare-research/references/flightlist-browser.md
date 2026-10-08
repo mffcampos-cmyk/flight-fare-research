@@ -20,6 +20,14 @@ code (`Z`=90, `R`=82, `H`=72). This was verified on 2026-10-03: with key codes,
 `ZRH`/`LIS` resolved to `airport:ZRH`/`airport:LIS`. Without them no suggestion
 appeared, which looks like a dead site but is a recipe error.
 
+## Form settings
+
+Set `#type`, `#class`, `#currency`, `#checkedbags`, `#sort`, `#stops` and
+`#connections` explicitly. Use `connections=false` when the contract has
+`self_transfer_ok: false`. Set `#duration` as a discovery ceiling only:
+FlightList can return a journey equal to the ceiling, so parse every direction
+yourself and let `run_log.py` apply the strict or inclusive cap.
+
 ## Setting the date range (the working method)
 
 Try normal calendar interaction first: for each exact date, select the day
@@ -73,11 +81,22 @@ cheapest rows frequently fail the return cap on long-haul routes (a cheap
 outbound under the cap can pair with a 29h40m return), so a raw price sort is
 not a qualified ranking. Skip cards whose price is missing rather than guessing.
 
-## Browser-act CLI note
+## Submitting and expanding
 
-This file assumes browser-act runs against the live browser. If the CLI and the
-browser disagree (CLI run as root does not see the chrome-user-owned browser),
-follow the environment and session-reuse section in
-`references/browser-act-support.md` — run the CLI as the OS user that owns
-the Chrome processes with matching HOME and display; setting HOME alone does
-not change daemon ownership.
+Click `#submit` and wait for populated `li.flight` cards. The URL does not
+encode the search, so save the query settings, retrieval time and raw card text
+as you go. Expand a card via `a[data-toggle="collapse"]` to see airlines, flight
+numbers, segment times, layovers, airport changes (sometimes only visible
+expanded) and the `Book Flight` link.
+
+## Limits
+
+- FlightList hands booking off to Kiwi and uses Kiwi-hosted assets: it is one
+  Kiwi-backed discovery family, never an airline-direct quote.
+- The checked-bag selector and Kiwi's `searchBags` parameter filter candidates;
+  they do not prove the displayed total includes the bag. Rows from FlightList
+  are `quote_state: "list"` with `baggage: "unverified"` until repriced.
+- A result is bookable only after the Kiwi handoff or the airline site
+  completes it.
+
+Engine-specific notes (key events, eval, sessions): `browser-engines.md`.

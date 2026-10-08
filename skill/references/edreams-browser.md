@@ -78,7 +78,7 @@ is unusable to pre-seed — always drive the form.
   discount. When the card exposes `Prime discounted price` and `Regular price`,
   retain both as observations, rank the regular/non-membership price by default,
   and re-open the fare family before treating either as a final total.
-- **Currency:** record each price in the currency the site shows (eDreams may show EUR while other sources show CHF). Do not convert silently; if comparing across currencies, show a clearly labelled conversion with the exchange rate and its date, and never present the converted amount as a bookable quote. A base currency such as CHF belongs to an optional named user profile, not a universal assumption.
+- **Currency:** record each price in the currency the site shows (eDreams may show EUR while the contract is in CHF) and add `fx` with rate, date and source to compare it; the converted amount is a comparison, not a bookable quote.
 
 ## Prior-run evidence
 

@@ -20,16 +20,11 @@ values from a prior run). Then click the current `Done. Search...` button,
 re-read state, and click Search. Never chain selectors across a re-render
 without checking the new state.
 
-Representative CDP control probes (only when the host exposes CDP helpers):
+The same steps in page code (run in page; key and text actions mapped per engine in `browser-engines.md`):
 
-```python
-nodes = cdp('Accessibility.getFullAXTree')['nodes']
-# Filter nodes by role/name before printing; the full tree is too large.
-
-js("document.querySelectorAll('input[aria-label=\"Return\"]')[1].focus()")
-cdp('Input.insertText', text='01/12/2027')
-cdp('Input.dispatchKeyEvent', type='keyDown', key='Enter', code='Enter', windowsVirtualKeyCode=13)
-cdp('Input.dispatchKeyEvent', type='keyUp', key='Enter', code='Enter', windowsVirtualKeyCode=13)
+```js
+// focus the second (calendar) Return input, then insert the locale date text and press Enter with key code 13
+document.querySelectorAll('input[aria-label="Return"]')[1].focus();
 ```
 
 Use locale-appropriate date text and verify the rendered human-readable date after entry; do not assume the input accepted it.
@@ -55,7 +50,7 @@ land on `/travel/flights/booking`.
 4. Record the provider quote and exact baggage wording, for example `1st checked bag available for a fee`. This completed-itinerary text overrides assumptions made from the result list. If the page says the previous price changed, use the new completed total everywhere the option is ranked.
 5. Expand `View options` when it exposes branded families such as Basic, Standard, Flex, or Latitude. Capture each relevant family price and baggage allowance, then compare `base fare + explicit first-bag fee` with the cheapest family that includes a bag; recommend the lower compliant total.
 6. If `View options` is absent, off-screen, or exposes no families when clicked, go to the airline's own booking engine (`airline-direct.md`) instead of assuming Google exposes branded fares. Keep the bag fee-required or unverified; do not infer an included bag.
-7. A bag price shown as a range with a zero lower bound (e.g. `1st checked bag: CHF 0–104`) means the allowance and exact amount are unverified — a zero lower bound is neither "included" nor a proven mandatory fee (issue 2.4). Reprice in the airline's own fare families (`airline-direct.md`) before any bag-inclusive total is ranked.
+7. A bag price shown as a range with a zero lower bound (e.g. `1st checked bag: CHF 0–104`) is `baggage: "unverified"`: neither included nor a proven fee. Reprice in the airline's own fare families (`airline-direct.md`) before any bag-inclusive total is ranked.
 
 ## One-way and multi-city searches
 
@@ -67,6 +62,15 @@ For multi-city results, the first card price is for the **entire trip**, but it 
 
 ## Batch collection
 
-For multiple airports/cabins, append each populated page to a JSON or CSV file with route, cabin, URL, raw rendered text, and retrieval time. Parse minima and counts programmatically, then revisit shortlisted itineraries individually for return choice and baggage qualification. Do not depend on opaque `tfs` bytes as a permanent interface; if reusing a generated URL as a batch optimization, verify every outcome in the visible form before accepting its data.
+For many date pairs, airports or cabins, add one row per populated result page
+with `run_log.py add` as soon as it is read: the cheapest relevant card as a
+`list` row (both directions when the card shows them), or an attempt row when
+the page did not populate. `run_log.py coverage` then shows exactly which
+comparisons are still open; revisit shortlisted itineraries one by one to
+select the return and qualify baggage.
 
-Persist each row before advancing so a timeout does not discard the batch. After the run, compare the collected and populated counts with the expected Cartesian product, retry only loading/incomplete rows without a real result count using a longer bounded wait; never retry rows with an explicit bot page, CAPTCHA, HTTP 403 or provider guard, then rewrite those rows in place while preserving successful observations. This recovery pattern avoids rerunning hundreds of completed searches because one browser session stalled.
+A page that is still loading or never showed a result count may be retried
+once with a longer wait. A page that showed a bot check, CAPTCHA, HTTP 403 or
+provider guard is a challenge: follow `browser-engines.md` and do not retry it.
+Opaque `tfs` URLs are a batch convenience, not an interface: verify each one in
+the visible form before trusting its results.
