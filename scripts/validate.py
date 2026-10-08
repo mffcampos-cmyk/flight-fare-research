@@ -20,6 +20,7 @@ GENERATED_TARGETS = (
     ROOT / "integrations" / "codex" / ".agents" / "skills" / "flight-fare-research",
     ROOT / "integrations" / "claude-code" / "skills" / "flight-fare-research",
 )
+SKILL_BODY_WORD_LIMIT = 2000
 COWORK_ZIP = ROOT / "dist" / "flight-fare-research-cowork.zip"
 PLUGIN_JSON = ROOT / "integrations" / "claude-code" / ".claude-plugin" / "plugin.json"
 HAND_AUTHORED_ARTIFACTS = (
@@ -103,6 +104,11 @@ def validate_internal_links(skill_root):
                     % (relative, line_no, token, skill_root.name)
                 )
     return errors
+
+
+def skill_body_word_count(text):
+    """Words in SKILL.md after its frontmatter block."""
+    return len(text[len(first_delimited_block(text)):].split())
 
 
 def validate_versions(root):
@@ -274,6 +280,12 @@ def main():
                     "SKILL.md frontmatter: description too long (%d > 1024 chars)" % len(desc)
                 )
 
+        words = skill_body_word_count(skill_md)
+        if words > SKILL_BODY_WORD_LIMIT:
+            errors.append(
+                "SKILL.md: body word budget exceeded (%d > %d); move detail into references"
+                % (words, SKILL_BODY_WORD_LIMIT)
+            )
         errors.extend(validate_internal_links(CANONICAL_SKILL))
         errors.extend(validate_plugin_schema(PLUGIN_JSON))
         errors.extend(validate_versions(ROOT))

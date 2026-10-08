@@ -1,6 +1,6 @@
 ---
 name: flight-fare-research
-description: "Use when researching live airfare and route hacks."
+description: "Use when the user wants flight prices found, compared or verified: cheapest or best flights, fixed or flexible dates, cabin comparisons, checked-bag costs, nearby-airport, split-ticket, open-jaw or stopover route hacks, or flights around a fixed event. Research only; never books."
 version: 1.1.1
 author: hermes-curator
 license: MIT
@@ -8,176 +8,187 @@ platforms: [linux, macos, windows]
 metadata:
   hermes:
     tags: [flights, airfare, travel, prices, baggage, browser]
-    related_skills: [grounded-citations, product-price-monitor, browser-automation]
+    related_skills: [product-price-monitor, browser-automation]
 ---
 
 # Flight Fare Research
 
-Research bookable flight choices for fixed or flexible dates. Compare like with like: traveler count, dates, airports, cabin, baggage, currency, and mandatory fees. Treat a search-result price as an observation, not a guaranteed fare.
+Find the best flight the user could actually book, not the lowest advertised
+fare: exact dates, the requested cabins, baggage, journey time and route hacks,
+with evidence for every price you recommend.
 
-## Choose the workflow
+You do the searching in a browser. Two scripts keep the books:
 
-- **Quick path:** fixed dates, one requested cabin, short/medium haul, no flexible dates, fixed event or stopover, and no explicit route-hack request. For a quick request: discover connectors, use a suitable connected search or Google Flights, qualify the shortlist airline-direct, and attempt one independent OTA cross-check. Run one practical nearby-airport check if permitted, otherwise record why not. Skip rolling pairs, FlightList, ITA Matrix, other cabins, and the full route-hack matrix.
-- **Full path:** flexible dates, several requested cabins, long-haul, a fixed event, stopover, or an explicit route-hack request. Use the full ladder, FlightList discovery, rolling matched pairs, the full route-hack matrix and stopover construction below.
-- Both paths keep the same exact-date, baggage, cabin, duration-cap, cookie, source-independence and safety gates. State the chosen path and any deliberate skips. Search and report **only the cabins requested**; if none is requested, state an economy assumption rather than silently searching three cabins.
+- `python3 <skill_dir>/scripts/run_log.py`: this run's search contract, every
+  observation row, each row's computed status, and whether the run is complete.
+- `python3 <skill_dir>/scripts/source_ledger.py`: which sources work, on which
+  browser engine.
 
-## Procedure
+Research only: stop before passenger details, and never book, pay, create
+accounts or handle credentials.
 
-### 1. Pin the search contract
+## The key rule
 
-Record travelers, origin area, destination airport/city, outbound and return dates, target trip length, cabin(s), checked/cabin bags, currency, acceptable date/length flexibility, any fixed event, required pre-event local sleeps, hard duration cap, and whether the user wants destination planning or flight research only. If the user knows the destination or asks only for fares, do not add sightseeing or a day-by-day itinerary. If the user names a country or region rather than an airport, search the practical airports without asking unless ground access changes the answer materially.
+Every price is a **lead** until `run_log.py` computes it **qualified**: both
+directions selected, each within the journey-time limit, baggage resolved for
+the requested bags, every all-in part priced, and repriced on the seller's own
+page. Recommend only qualified options. A lead appears in the report's
+"Leads (not verified)" section with its reasons, never as the pick.
 
-Use only the origins, currency, nearby gateways and per-direction duration limits specified or confirmed for the current request. Do not infer a home location or persistent travel profile. State any assumptions before searching. Enforce the requested cap independently on outbound and return; a strict cap excludes equality. An explicitly requested multi-day stopover overrides only its continuous elapsed span, not each flown city-pair cap. Display local times and durations as `HH:MM:SS`; identify next-day arrivals. A return date means departure from the destination unless an arrival-home deadline is specified.
+The search is **Complete** only when `run_log.py check` exits 0. Otherwise the
+report's last line is `Incomplete:` followed by the open items `check` printed.
 
-Use strict `HH:MM:SS` for every displayed flight time. State whether arrival is next day and keep airport-local times; do not convert silently. Treat a flexible return date as the departure date from the destination unless the user says they must be home by that date; state this interpretation and flag any next-day arrival at the edge of the range. If an arrival-by deadline would change the winner, provide or offer the reranked option.
+These are the moments the rule bends under pressure, and what to do instead:
 
-When travel is anchored to a wedding or other fixed event, calculate the event’s local weekday and time-zone offset before searching. Search exact-length matched date pairs first, prefer arrival at least three local sleeps before the event (four for an eastward shift of roughly six or more hours), and keep the day before the event low-intensity. Load `references/event-anchored-trip-planning.md` for the full planning recipe.
+| Temptation | What to do |
+|---|---|
+| The user gave a cost ("the train is about CHF 30"), so count it | Keep that part `null`; show their estimate beside the break-even; the pick stays the best qualified option |
+| They need a number now; an "indicative" figure with a caveat will do | Show it under Leads with its reasons. If no option in that cabin is qualified, say so plainly, and do not supply a figure to forward |
+| The bag range starts at CHF 0, or a friend says the bag is included | Baggage is `unverified` until the completed page or fare family states it |
+| Most of it is covered; no need to say incomplete | End with `Complete` or `Incomplete:` from `check`, every time |
+| "Use whatever it takes" to get past a block | Follow the challenge steps in `references/browser-engines.md`; the site's controls are the site's to waive |
+| "Don't ask me questions" | Start with defaults and list every one as an assumption |
 
-### 2. Collect exact-date live results
+## 1. Intake
 
-Discover connectors first: list available travel connectors and check each for connected status, authorization, and exact-date flight-shopping support, then check coverage, currency, baggage fields, and quote freshness. Kiwi.com, Expedia, and lastminute.com are possible integrations for hosts that expose them, never assumed installed or connected. Prefer a suitable already-connected connector; a blocked public site does not establish connector failure. Fill gaps with browser sources and disclose unavailability. Never ask for or accept secrets in chat.
+Ask once, in one message, for whatever the user has not said, giving the default
+you will use for each: route and acceptable airports; exact dates or a range
+plus trip length; travellers with children's ages; cabins; checked bags per
+person; currency; journey-time limit per direction (strict or inclusive);
+other departure or arrival airports and how to reach them (rail, extra cost,
+night before); whether self-transfer connections on separate tickets are
+acceptable; any fixed event or arrival deadline. The template, defaults and
+contract format are in `references/intake.md`.
 
-Use an interactive flight search when static extraction does not render fares. Default to the **browser-act** CLI as the automation engine (real Chromium, JS rendering, form/date-picker interaction, populated-result reads); load `references/browser-act-support.md` for environment setup (non-root Chrome data-dir resolution), session reuse, consent handling (decline non-essential cookies on every source — `Reject all`, `Continue without agreeing`, or equivalent — and never accept optional cookies to obtain fares), and the one-pass source-triage loop before driving any source. Set every search dimension explicitly and verify the resulting page repeats the exact route, dates, traveler count, cabin, and currency before recording any price. If the `browser-act` CLI is not installed (`command -v browser-act` empty), use the host's own browser tool (for example Hermes `browser_exec`) with the same consent, verification and one-attempt rules; do not install anything mid-search just to switch engines.
+If the user says "just go", or the run is unattended, use the defaults and
+record each in the contract's `assumptions`.
 
-For each result save:
+Done when `run_log.py init --contract FILE` exits 0.
 
-- retrieval time and source URL;
-- total round-trip price and currency;
-- operating/marketing airlines;
-- departure and arrival airports and local times;
-- stop count, elapsed duration, airport changes, and overnight arrival;
-- cabin mix and baggage status;
-- whether the price is a headline list fare or a completed-itinerary booking quote.
+## 2. Scope
 
-Wait for a real result count and populated itineraries. A loading shell, route teaser, cached monthly minimum, CAPTCHA, or bot page is not an exact-date quote.
+- **Quick:** fixed dates, one cabin, short or medium haul, no hack or stopover
+  request.
+- **Full:** flexible dates, long haul, several cabins, route hacks, a stopover
+  or a fixed event.
 
-For a fixed-length flexible trip, enumerate **rolling matched pairs** before searching. Example: “10 days, anywhere from 5–15 through 10–20 March” means `5→15`, `6→16`, `7→17`, `8→18`, `9→19`, and `10→20`—six exact windows per origin/cabin. Keep the fixed event inside every pair and calculate destination sleeps before it. Do not silently replace these with one ±2-day pair or with a cheaper trip of a different length.
+`init` turns scope and the user's permissions into the list of comparisons the
+run must finish, and marks the rest not applicable with a reason. State the
+scope to the user.
 
-Before searching two independent outbound and return date ranges, calculate the trip lengths they imply. Do not treat the ranges alone as approval for every Cartesian pairing when those pairings create trips of different lengths: confirm variable trip lengths are acceptable or pin a target length first. Once confirmed, enumerate the Cartesian product, label every trip length, and enforce any minimum event buffer. Save every pair, verify the expected count programmatically, and rank from the collected rows. A calendar heatmap or date-grid minimum is not a substitute for exact-date results.
+## 3. Collect exact-date results
 
-**Source health gate (full path):** run `python3 <skill_dir>/scripts/source_ledger.py status` first. Exit 0 means the ledger is fresh, so use `order` to choose the ladder. Exit 3 means some core sources are stale (older than 7 days) or untested: probe only those with the fixed canary search, record each state, then run `order`. Follow `references/source-health.md`. Canary prices are health evidence only, never fare evidence for the user's trip. When a source marked `ok` blocks you mid-run, record it `blocked` immediately.
+1. **Connectors first.** Check which travel connectors are present, connected,
+   authorized and able to price exact dates; prefer a capable one. With
+   credentials already configured, use the official APIs in
+   `references/source-ladder.md`. Never ask for secrets in chat.
+2. **Source health (full path).** Run `source_ledger.py status`; on exit 3
+   probe only the listed sources with the canary, then run `order`
+   (`references/source-health.md`). Canary prices are never fare evidence.
+3. **Browser.** Use the highest-rung engine available and pace searches like a
+   person (`references/browser-engines.md`).
+4. **Search.** Follow the source's recipe: `references/google-flights-browser.md`,
+   `references/flightlist-browser.md`, `references/edreams-browser.md`,
+   `references/ita-matrix-browser.md`, `references/azair-browser.md`,
+   `references/airline-direct.md`. Set every search field
+   explicitly and confirm the page repeats the route, dates, travellers, cabin
+   and currency. A loading shell, teaser, cached monthly minimum or calendar
+   heatmap is not a result.
+5. **Save as you go.** Add each populated page (or blocked, empty or broken
+   attempt) with `run_log.py add` as soon as you have read it. Row fields are
+   in `references/qualification.md`.
 
-Load `references/source-ladder.md` before choosing collection sources. The default no-credential **full-path** browser flow is (reorder or skip rungs per `source_ledger.py order`):
+For a flexible fixed-length trip, `init` expands rolling matched pairs (5→15,
+6→16, …); separate outbound and return ranges need the user's explicit yes to
+varying trip lengths.
 
-0. For a **quick** request, a compact variant is: Google Flights `?q=` link (or a connected search), airline-direct qualification, one independent travel-agency cross-check, and one practical nearby-airport check; then stop.
-1. Use **FlightList** (full path) to scan broad flexible date ranges, cabins, duration limits, checked-bag candidates, and self-transfer alternatives in one query.
-2. Reproduce shortlisted exact date pairs in **Google Flights** and complete both directions.
-3. Cross-check the shortlist on **eDreams** — an OTA observed working in prior runs, with its own booking engine and per-fare baggage labels, requiring a fresh exact-date result in this run (see `references/edreams-browser.md` for the form flow).
-4. Reprice the winner in the **operating or ticketing airline's own booking engine** to expose branded fare families, baggage, and direct-booking totals.
-5. Use **ITA Matrix** for an independent schedule/fare cross-check when its search form submits successfully.
-6. Use Booking.com Flights, Alternative Airlines, or **AZair** (low-cost carriers only, `references/azair-browser.md`) as opportunistic cross-checks when their rendered search flow works; never depend on them for exhaustive collection.
+Done when `run_log.py coverage` shows every baseline comparison closed, or
+open only because every source for it was blocked.
 
-FlightList is a discovery source, not final baggage proof: its results lead to Kiwi booking links, and a checked-bag search filter does not establish that the completed fare still includes the bag. For the FlightList date-picker automation and result extraction, load `references/flightlist-browser.md`. For Google Flights browser details and selectors, load `references/google-flights-browser.md`. For ITA Matrix, load `references/ita-matrix-browser.md`. The `references/source-ladder.md` file tracks which public frontends are currently blocked (KAYAK, Priceline, Orbitz, Kiwi direct, and others) with observed failure modes; re-test sources on future runs because accessibility changes.
+## 4. Route hacks (full path)
 
-### 3. Verify the complete itinerary and baggage
+Test each permitted hack for each cabin: split one-ways, open-jaw or
+multi-city, nearby departure airports, alternative arrival airports, and a
+stopover when asked. Price the whole trip: tickets, bags, positioning both
+ways, unavoidable hotel nights and transfers. An unpriced part keeps the hack a
+lead; show its break-even instead of a total. Use `run_log.py rank` to skip
+leads that cannot beat the best qualified total. Details, timing risks and
+stopover construction: `references/route-hacks.md`.
 
-Select both outbound and return before judging the fare. Apply any journey-duration cap independently to the outbound and return choices before selecting the lowest price; a cheap outbound does not qualify when every compatible return breaches the cap. The result list may say that optional bag fees apply; it does not prove inclusion. On the completed itinerary, record the explicit baggage line and booking-provider total.
+Done when every hack comparison is closed in `coverage`.
 
-Classify baggage as exactly one of:
+## 5. Qualify the shortlist
 
-- **included** — the completed itinerary or fare family explicitly includes at least one checked piece;
-- **fee required** — the page explicitly says the first checked bag costs extra;
-- **unverified** — no itinerary-level allowance is exposed, or a range whose lower bound is zero (e.g. `CHF 0–104`) leaves allowance and amount uncertain. A zero lower bound proves neither inclusion nor a required fee; use **fee required** only when an itinerary-specific positive charge or explicit paid-bag requirement is proven.
+From `rank`, take the cheapest unpruned candidates in each cabin plus the best
+time-for-price option. For each one, following `references/qualification.md`:
+select both directions; read each direction's duration; keep the cabin label
+exactly as shown (`Economy + Premium Economy`); record baggage per ticket;
+compare the bag-inclusive fare family with base fare plus bag fee; reprice on
+the airline's or seller's page (stop before passenger details); price every
+remaining all-in part. A reprice is a new row that `supersedes` the list row.
 
-Never label a fare “bag included” from airline norms, cabin expectations, or a generic policy page. Use the airline policy only to explain which fare family must be selected; reprice that family at checkout when possible.
+Done when `rank` shows a qualified best option in every requested cabin, or
+you have closed that cabin's `reprice` comparison with
+`run_log.py resolve <cell> --as none_qualify --reason …`.
 
-Expand branded fare families whenever the booking card exposes them. If `View options` is absent, off-screen, inert, or exposes no usable family/baggage details after one bounded attempt, go to the airline booking engine (`references/airline-direct.md`). Compare the cheapest bag-inclusive family against the base fare plus the explicit bag fee; the inclusive family can be cheaper than adding a bag to the headline fare. If the completed page says the price changed, replace the list-page amount with the completed provider total and retain the old amount only as a clearly labeled stale observation.
+## 6. Cross-check and report
 
-### 4. Compare cabins honestly
+Attempt at least two independent source families per cabin. Frontends sharing
+one inventory are one family (FlightList and Kiwi; any Google Flights wrapper;
+Opodo and eDreams); an airline's booking card inside an aggregator is evidence
+for that aggregator, not a second family. Run the independence test in
+`references/source-ladder.md` before calling a price corroborated.
 
-Search economy, premium economy, and business separately when requested. Preserve mixed-cabin labels such as `Economy + Premium Economy` or `Business + Economy`; do not shorten them to the higher cabin. Prefer a slightly higher pure-cabin itinerary over a misleading mixed-cabin headline, and identify which long-haul segment carries the premium cabin when detail is available.
+Run `run_log.py rank` and `run_log.py check`, then write the report in this
+order:
 
-### 5. Run the route-hack matrix
+1. **Search:** the contract in one or two lines, every assumption, scope, and
+   the retrieval window with timezone.
+2. **Recommended:** for each requested cabin, the qualified options ranked by
+   all-in total, then practicality. Each shows: all-in price and currency,
+   airlines, route, airport-local times as `HH:MM:SS` with next-day arrivals
+   marked, duration and stops per direction, cabin label, baggage state, risk
+   flags from `rank`, retrieval time and booking link.
+3. **Route hacks:** each tested hack with its all-in total or break-even,
+   added days and risk, against the best home-airport option.
+4. **Leads (not verified):** each lead with the price seen and every reason
+   `run_log` gave.
+5. **Sources:** families used, shared-inventory relations, blocked sources with
+   the engine, and single-source confidence where it applies.
+6. **Last line:** `Complete`, or `Incomplete:` plus each open item from
+   `check`.
 
-On the **full path**, establish the normal round trip from the home airport, then test every applicable structure below against the same matched date windows and cabin:
+Cite only pages you retrieved: source, URL (or connector query), timestamp
+with timezone, and the claim it supports. Keep currencies as shown; a
+conversion carries its rate and date. Only the requested cabins appear, and
+destination sightseeing only when asked. For a wedding, race or other fixed
+event, plan the window with `references/event-anchored-trip-planning.md`.
 
-1. **Split one-ways:** sum independently priced outbound and return one-way tickets, including different airlines and sales channels; compare the bag-qualified sum with the completed round trip.
-2. **Multi-city/open-jaw:** test home→destination plus destination→nearby European hub, the reverse orientation, and mixed home/nearby-airport endpoints. Add the train or positioning leg needed to close the open jaw.
-3. **Nearby gateways:** test practical rail/short-flight hubs in both round-trip and one-way combinations. Prefer rail where it eliminates another checked-bag fee or airport connection.
-4. **Alternate destination gateways:** test a major regional gateway plus a protected or separately priced local leg only when elapsed time, baggage handling, and misconnection risk remain acceptable.
-5. **Stopover and route-specific opportunities:** look for fifth-freedom flights, free/cheap stopover programs, new seasonal routes, rail-and-fly products, and current route deals using the lead-discovery tiers below. Treat indexed deal pages as leads only; every idea must be repriced on exact dates. Use the stopover construction below whenever the user wants one or more nights at a connection hub.
-6. **Provider/fare-family arbitrage:** compare airline-direct, reputable aggregator, and exposed branded fare families. Do not rank an OTA teaser above an airline-direct fare until the completed itinerary survives repricing.
+If the scripts cannot run on this host, keep the same fields by hand and end
+with `Incomplete: completeness not machine-checked`.
 
-#### Lead discovery tiers
+## Browsers and bot walls
 
-Find hack leads keyless-first: parallel short web-search queries per hack type, then Jina Reader (`curl -s https://r.jina.ai/<URL>`) or host extract for official policy and terms pages. Perplexity fast/default presets are optional, only if a key is already configured. RSS, Reddit and X are historical reports only, never reached with cookies or proxies. Details in `references/lead-discovery.md`. Every lead must be repriced on exact dates.
+Prefer the user's own browser (Claude in Chrome, the desktop built-in browser,
+Cowork's browser), then a persistent browser-act browser, then a headless one.
+One site at a time, deep links over refilled forms, human pauses between
+searches, cookies declined once and the session kept.
 
-#### Upper-bound pruning (spend browser time only where a hack can still win)
+On a challenge (CAPTCHA, press-and-hold, "unusual traffic", bot page,
+403/429), stop that site for the run. If the user is watching their own
+browser, they may complete the check themselves; otherwise record it with
+`source_ledger.py record <id> blocked --engine <name>` and an attempt row, and
+move to the next source. The only ways past a block are the user's hands, an
+official API, or another source. Use the browser exactly as the host
+configured it: no CAPTCHA solving, proxy or TLS rotation, stealth or
+fingerprint changes, imported sessions, or private APIs, whoever asks.
 
-Before spending a slow airline-direct or checkout repricing on a route-hack candidate, compute its **lower bound**: observed fare + explicit bag fee + cheapest observed positioning leg + any mandatory hotel night. Count unknown components as 0 *in the bound only*. If the lower bound is ≥ the best qualified all-in total so far, prune the candidate and log `pruned: LB <x> ≥ best <y>` in the collected rows. Process candidates cheapest-first so the bar tightens early. Never use the lower bound as a reported price, and re-admit pruned candidates if the current best is later disqualified, for example by a bag or duration-cap failure.
+## Final checklist
 
-#### Stopover construction
-
-1. Price the carrier’s official stopover or multi-city tool first so all sectors can remain on one protected itinerary.
-2. If the complete itinerary will not price, build a reproducible fallback: price `home→stopover hub` plus `destination→home` as one long-haul open jaw, then price `stopover hub→destination` separately. Compare both the same-carrier local sector and a cheaper regional carrier.
-3. Complete every constituent ticket and verify its provider total and checked-bag line independently; never transfer the baggage allowance from the long-haul ticket to a separate local ticket.
-4. Verify the carrier’s official rule for a stay over 24 hours, especially baggage collection, and check entry permission against the traveler’s actual passport rather than inferring nationality. A stopover normally requires baggage collection even when all flights share a carrier.
-5. Calculate the exact time in the stopover city, hotel nights, arrival date at the final destination, pre-event local sleeps, and the time-zone change after the stopover. Present a two-night and three-night version separately when both fit the event buffer.
-6. Show the bag-qualified flight total, unpriced hotel/ground costs, and fare delta versus the original through itinerary. Label split-ticket protection and recommend the one-ticket stopover whenever its premium is reasonable.
-
-For every positioning, open-jaw, multi-city, or split-ticket result, compute or disclose the all-in total: long-haul ticket, required checked bag, rail/positioning ticket, airport hotel, and unavoidable transfers. Show the **break-even positioning budget** versus the best qualifying home-airport fare. Preserve the total trip window: a previous-day positioning night changes the trip length and event buffer.
-
-Disclose self-transfer, baggage reclaim/recheck, airport changes, separate-ticket misconnection exposure, and transit-entry requirements still needing verification. Recommend previous-day positioning for a high-value long-haul ticket unless the connection is protected on one ticket. For the return positioning leg, reject departures that leave no realistic time after the long-haul arrival for immigration, baggage reclaim, terminal transfer, and recheck; price a later same-day flight or hotel instead, and show that timing in the all-in construction. Reject hidden-city ticketing when checked luggage is required because the bag normally follows the ticketed destination; never present throwaway segments as a bag-compatible hack.
-
-### 6. Cross-check and rank
-
-Use at least two independent live **source families** when accessible—for example FlightList/Kiwi discovery plus Google Flights completion, followed by airline-direct repricing. Two frontends backed by the same inventory or redirect chain are not fully independent; disclose the relationship. An airline-direct booking card exposed inside an aggregator is useful qualification evidence but is not a separate retrieval source until the airline site itself returns the fare.
-
-If a source displays an explicit bot page, CAPTCHA, Cloudflare block, HTTP 403, or provider guard, make one recorded attempt, mark it blocked for that run, and move on. Do not loop retries, install or configure anti-detection tooling, rotate proxies, solve CAPTCHAs, or otherwise evade the provider's controls merely to recover a fare. Use an official API, airline-direct engine, alternate source, or user-visible manual path instead. If only one exact-date source remains, say so plainly and downgrade confidence rather than implying corroboration. Cite only pages actually retrieved, following `grounded-citations` when available. Inline fallback where that skill is unavailable: give source name, retrieved URL (or connector identity/query/offer ID), retrieval timestamp with timezone, and the exact claim supported; distinguish current observations, historical user reports, policies, and unvisited navigation links; never cite a blocked page as fare evidence.
-
-When credentials are already configured, prefer the official APIs in `references/source-ladder.md`: Duffel for live offers plus ancillary-bag pricing, Skyscanner Flights Live Prices for partner inventory, or Amadeus Flight Offers Search/Price for fare and baggage data. Never ask for or accept API secrets in chat; use the configured secret store or environment.
-
-Apply hard gates first: matched trip window, fixed event and sleep buffer, per-direction duration cap, completed cabin integrity, and checked-bag requirement. Then rank **each requested cabin separately** for:
-
-1. lowest qualified all-in total;
-2. best time/price balance;
-3. best pure-cabin option when the cheapest is mixed;
-4. best route hack after positioning cost, added trip days, and failure risk.
-
-On the full path, for each requested cabin, compare the winning round trip against split one-ways, multi-city/open-jaw, and nearby-gateway structures. A hack is a winner only when its all-in total and operational risk beat the home-airport baseline.
-
-Show the baggage state beside every shortlisted price. Do not bury an unpriced bag supplement in a footnote.
-
-## Output Shape
-
-- Start with assumptions, the enumerated matched date windows, event buffer, and retrieval timestamp.
-- Give compact sections for the requested cabins only; identify the lowest qualified all-in fare in each. Do not add cabins the user did not ask for.
-- Each option includes price, airlines, route, local times, stops/duration, cabin integrity, and baggage state.
-- Put split one-ways, multi-city/open-jaw, nearby-airport/rail, and other route hacks in a separate comparison with all-in cost, break-even budget, added days, and risk.
-- Include only the event/jet-lag timing needed to justify the travel window. Do not add destination sightseeing or a day-by-day itinerary unless requested.
-- End with 3–5 ranked recommendations and direct search/booking links.
-- Distinguish live exact-date quotes from generic airline-policy or deal-page evidence.
-
-## Pitfalls
-
-- Verify the completed itinerary before claiming baggage inclusion — list pages commonly quote a no-bag fare.
-- Preserve mixed-cabin wording — the highest cabin in the itinerary is not the cabin for every segment.
-- Reject stale monthly minima and indexed teaser prices as exact-date evidence — they may describe another travel period.
-- Price both directions before reporting a round-trip total — an outbound card can change after the return is chosen.
-- Include airport changes explicitly — a nominal one-stop itinerary can require reclaiming bags and crossing a city.
-- Compare route hacks only after positioning costs, baggage, added hotel nights, changed trip length, and failure risk—a cheaper long-haul origin can be worse all-in.
-- Do not infer permission for variable trip lengths merely from separate outbound and return date ranges; confirm that Cartesian pairings are intended before searching, because each pairing may represent a materially different trip length. Never call a Cartesian sweep equivalent to a fixed-length rolling window; generate the matched pairs explicitly and verify their count.
-- On the full path, do not stop at nearby-airport round trips; split one-ways and open-jaw/multi-city combinations can produce a lower all-in fare or remove a positioning leg.
-- Treat route-hack articles and indexed deal prices as discovery leads, never exact-date evidence.
-- Treat FlightList's checked-bag filter as a candidate signal only; its Kiwi handoff must survive fare-family and baggage repricing before the result qualifies.
-- Do not count SerpAPI or another Google Flights wrapper as an independent source from Google Flights; FlightList and its Kiwi handoff are one discovery family.
-- Stop after one explicit bot/CAPTCHA/403 response from a source during the run; repeated retries waste time and do not improve evidentiary quality.
-- Save multi-airport/cabin batches to JSON or CSV and aggregate programmatically—visual scanning loses fares and creates count errors.
-
-## Verification
-
-- [ ] Route, dates, passengers, target trip length, cabins, airports, currency, fixed event, and required pre-event sleeps match the request.
-- [ ] Every rolling matched date pair was searched for every required origin/cabin; collected counts equal `pairs × origins × cabins`.
-- [ ] Every shortlisted outbound and return independently satisfies the total-journey duration cap; exactly 20 hours fails a strict under-20-hour requirement.
-- [ ] Every shortlisted price comes from a populated exact-date result or completed itinerary; any booking-page reprice supersedes the list amount.
-- [ ] Every shortlisted option says included, fee required, or unverified for checked baggage, and any exposed base-plus-bag total was compared with the bag-inclusive fare family.
-- [ ] Workflow scope is explicit: quick path used (one nearby-airport check plus recorded reason for any skips) or full path used (round trip, split one-ways, multi-city/open-jaw, nearby-airport/rail compared for each requested cabin or marked not applicable with a reason).
-- [ ] Mixed cabins, self-transfers, airport changes, separate tickets, and added positioning days are explicit.
-- [ ] Any requested multi-day stopover was priced as one protected itinerary first and, when needed, as an open-jaw-plus-local fallback; each ticket’s baggage, hotel nights, event buffer, entry caveat, and delta versus the through fare are explicit.
-- [ ] Every route hack shows all-in cost or a clearly labeled unpriced component plus its break-even budget versus the home-airport baseline.
-- [ ] Destination sightseeing is omitted unless the user requested it.
-- [ ] At least two independent source families were attempted; successful sources, shared inventory relationships, blocked sources, and single-source confidence limits are explicit.
-- [ ] Any FlightList candidate was reproduced on a completed booking source before baggage inclusion or bookability was claimed.
-- [ ] Sources and retrieval time are present; blocked sources and indexed deal pages are not presented as fare evidence.
-- [ ] Full path: `source_ledger.py status` was checked; stale core sources were canary-probed and recorded; any mid-run block was recorded; canary prices were not cited as fares.
-- [ ] Pruned route-hack candidates are logged with their lower bound and the best total that beat them.
+- [ ] `init` ran; every assumption is in the report.
+- [ ] Every observation, including blocked attempts, was added as a row when read.
+- [ ] `coverage` shows no open comparison the report does not mention.
+- [ ] Every recommendation is `qualified` in `rank`; every lead sits under Leads with its reasons.
+- [ ] Mixed cabins, self-transfers, airport changes, separate tickets and extra nights are visible.
+- [ ] Blocked sources are named with their engine; no challenge was bypassed.
+- [ ] The last line is `Complete` or `Incomplete:` from `check`.

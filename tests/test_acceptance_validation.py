@@ -112,3 +112,10 @@ def test_bytecode_is_never_packaged(project):
     assert not any("__pycache__" in n for n in names)
     assert not (project / "integrations/claude-code/skills/flight-fare-research/scripts/__pycache__").exists()
     assert run_script(project, "validate.py", "--strict").returncode == 0
+
+
+def test_skill_body_word_budget(project):
+    sk = project / "skill/SKILL.md"
+    sk.write_text(sk.read_text() + "\n" + "word " * 2001)
+    result = validate(project)
+    assert result.returncode == 1 and "word budget" in result.stderr
