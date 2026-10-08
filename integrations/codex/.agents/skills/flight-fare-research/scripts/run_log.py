@@ -25,7 +25,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 HACKS = ("split", "open_jaw", "nearby_origin", "alt_destination", "stopover")
 CABINS = ("economy", "premium", "business", "first")
@@ -253,6 +253,230 @@ def build_cells(contract: dict) -> list[dict]:
     return cells
 
 
+# --------------------------------------------------------------------------- rows
+
+OUTCOMES = ("populated", "blocked", "empty", "error")
+QUOTE_STATES = ("list", "completed", "repriced")
+BAGGAGE = ("included", "fee_required", "unverified")
+PRICE_BASES = ("total", "per_person")
+ATTEMPT_FIELDS = ("source", "family", "engine", "outcome", "url", "retrieved_at", "cabin")
+POPULATED_FIELDS = ("currency", "origin", "destination", "outbound_date", "tickets", "directions")
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value
+
+
+def validate_row(row: dict, contract: dict) -> list[str]:
+    """Return a list of problems with an observation row; [] when valid."""
+    if not isinstance(row, dict):
+        return ["row must be a JSON object"]
+    errors = [f"{field} is required" for field in ATTEMPT_FIELDS if row.get(field) in (None, "")]
+    if row.get("outcome") not in (None, "") and row["outcome"] not in OUTCOMES:
+        errors.append(f"outcome must be one of {', '.join(OUTCOMES)}")
+    stamp = row.get("retrieved_at")
+    if stamp not in (None, ""):
+        try:
+            if datetime.fromisoformat(str(stamp)).tzinfo is None:
+                errors.append("retrieved_at needs a timezone offset, e.g. 2026-10-08T14:03:00+02:00")
+        except ValueError:
+            errors.append("retrieved_at must be an ISO 8601 timestamp with a timezone offset")
+    hack = row.get("hack")
+    if hack is not None and hack not in HACKS:
+        errors.append(f"hack must be null or one of {', '.join(HACKS)}")
+    if row.get("price_basis", "total") not in PRICE_BASES:
+        errors.append(f"price_basis must be one of {', '.join(PRICE_BASES)}")
+    if row.get("outcome") != "populated":
+        return errors
+    errors.extend(f"{field} is required for a populated row" for field in POPULATED_FIELDS
+                  if field not in row or row[field] in (None, ""))
+    tickets = row.get("tickets")
+    if "tickets" in row and (not isinstance(tickets, list) or not tickets):
+        errors.append("tickets must be a non-empty list")
+    for n, t in enumerate(tickets if isinstance(tickets, list) else [], 1):
+        if not isinstance(t, dict):
+            errors.append(f"tickets[{n}] must be an object")
+            continue
+        if not _is_number(t.get("price")) or t["price"] < 0:
+            errors.append(f"tickets[{n}].price must be a non-negative number (no currency text)")
+        if t.get("quote_state") not in QUOTE_STATES:
+            errors.append(f"tickets[{n}].quote_state must be one of {', '.join(QUOTE_STATES)}")
+        if t.get("baggage") not in BAGGAGE:
+            errors.append(f"tickets[{n}].baggage must be one of {', '.join(BAGGAGE)}")
+        if t.get("bag_fee") is not None and (not _is_number(t["bag_fee"]) or t["bag_fee"] < 0):
+            errors.append(f"tickets[{n}].bag_fee must be null or a non-negative number")
+    if "directions" in row and not isinstance(row["directions"], list):
+        errors.append("directions must be a list")
+    components = row.get("components") or {}
+    if not isinstance(components, dict):
+        errors.append("components must be an object")
+    else:
+        errors.extend(f"components.{k} must be null or a non-negative number" for k, v in components.items()
+                      if v is not None and (not _is_number(v) or v < 0))
+    fx = row.get("fx")
+    if fx is not None and (not isinstance(fx, dict) or not _is_number(fx.get("rate")) or fx["rate"] <= 0):
+        errors.append("fx must be null or {\"rate\": number > 0, \"date\": ..., \"source\": ...}")
+    return errors
+
+
+def row_cell_id(row: dict) -> str:
+    if row.get("hack"):
+        return f"{row.get('cabin')}/hack/{row['hack']}"
+    return baseline_cell_id(row.get("cabin"), row.get("origin"), row.get("destination"),
+                            row.get("outbound_date"), row.get("return_date"))
+
+
+def _hard_gate_reasons(row: dict, c: dict) -> list[str]:
+    reasons = []
+    cap = c.get("max_duration")
+    if cap:
+        limit = duration_to_seconds(cap["value"])
+        kind = "strict" if cap["strict"] else "inclusive"
+        for d in row.get("directions") or []:
+            try:
+                seconds = duration_to_seconds(d.get("duration"))
+            except ValueError:
+                continue
+            if seconds > limit or (cap["strict"] and seconds == limit):
+                reasons.append(f"{d.get('dir')} duration {d['duration']} breaks {kind} cap {cap['value']}")
+    if not c["self_transfer_ok"] and any(d.get("self_transfer") for d in row.get("directions") or []):
+        reasons.append("self-transfer not allowed")
+    if row.get("cabin") not in c["cabins"]:
+        reasons.append("cabin not requested")
+    pair = [row.get("outbound_date"), row.get("return_date") if c["trip_type"] == "return" else None]
+    if pair not in expand_dates(c["dates"], c["trip_type"]):
+        reasons.append("dates not in contract")
+    hack = row.get("hack")
+    origins = c["nearby_origins"] if hack == "nearby_origin" else c["origins"]
+    if row.get("origin") not in origins:
+        reasons.append("origin not in contract")
+    if hack == "alt_destination":
+        destinations = c["alt_destinations"]
+    elif hack == "open_jaw":
+        destinations = c["destinations"] + c["alt_destinations"]
+    else:
+        destinations = c["destinations"]
+    if row.get("destination") not in destinations:
+        reasons.append("destination not in contract")
+    components = row.get("components") or {}
+    if not c["positioning"]["allowed"] and (hack == "nearby_origin" or "positioning" in components):
+        reasons.append("positioning not allowed")
+    if row.get("positioning_overnight") and not c["positioning"]["overnight_ok"]:
+        reasons.append("overnight positioning not allowed")
+    return reasons
+
+
+def _lead_reasons(row: dict, c: dict) -> list[str]:
+    reasons = []
+    dirs = row.get("directions") or []
+    present = {d.get("dir") for d in dirs}
+    if "out" not in present:
+        reasons.append("outbound not selected")
+    if c["trip_type"] == "return" and "ret" not in present:
+        reasons.append("return not selected")
+    for d in dirs:
+        try:
+            duration_to_seconds(d.get("duration"))
+        except ValueError:
+            reasons.append(f"duration unknown ({d.get('dir')})")
+    tickets = row.get("tickets") or []
+    if any(t.get("quote_state") == "list" for t in tickets):
+        reasons.append("list fare not repriced")
+    if c["bags"]["checked_per_person"] > 0:
+        if any(t.get("baggage") == "unverified" for t in tickets):
+            reasons.append("baggage unverified")
+        if any(t.get("baggage") == "fee_required" and t.get("bag_fee") is None for t in tickets):
+            reasons.append("bag fee unknown")
+    reasons.extend(f"{name} unpriced" for name, value in (row.get("components") or {}).items() if value is None)
+    if row.get("currency") != c["currency"] and not row.get("fx"):
+        reasons.append("currency differs; no fx recorded")
+    if row.get("price_basis") == "per_person" and c["travelers"].get("infants"):
+        reasons.append("per-person price with infants; record the total")
+    return reasons
+
+
+def row_status(row: dict, contract: dict, superseded: set[str]) -> tuple[str, list[str]]:
+    """Compute a row's status and the reasons behind it (never asserted by the agent)."""
+    c = normalize_contract(contract)
+    if row.get("id") in superseded:
+        return "superseded", []
+    if row.get("outcome") != "populated":
+        return "attempt", []
+    hard = _hard_gate_reasons(row, c)
+    if hard:
+        return "rejected", hard
+    soft = _lead_reasons(row, c)
+    if soft:
+        return "lead", soft
+    return "qualified", []
+
+
+def _sum_parts(row: dict, c: dict) -> float:
+    tickets = row.get("tickets") or []
+    fares = sum(t.get("price") or 0 for t in tickets)
+    if row.get("price_basis") == "per_person":
+        fares *= c["travelers"]["adults"] + len(c["travelers"]["children_ages"])
+    bags = 0.0
+    if c["bags"]["checked_per_person"] > 0:
+        bags = sum(t.get("bag_fee") or 0 for t in tickets if t.get("baggage") == "fee_required")
+    extras = sum(v for v in (row.get("components") or {}).values() if v is not None)
+    total = fares + bags + extras
+    if row.get("fx"):
+        total *= row["fx"]["rate"]
+    return round(total, 2)
+
+
+def all_in(row: dict, contract: dict) -> float:
+    """All-in total in the contract currency (meaningful for qualified rows)."""
+    return _sum_parts(row, normalize_contract(contract))
+
+
+def lower_bound(row: dict, contract: dict) -> float:
+    """Lowest possible all-in total: unknown parts count as 0. Never a price."""
+    return _sum_parts(row, normalize_contract(contract))
+
+
+# --------------------------------------------------------------------------- storage
+
+def resolve_run_dir(arg: str | None) -> str:
+    if arg:
+        if not os.path.isfile(os.path.join(arg, "contract.json")):
+            raise UsageError(f"no run at {arg}; create one with: run_log.py init --contract FILE")
+        return arg
+    root = runs_root()
+    candidates = []
+    if os.path.isdir(root):
+        for name in os.listdir(root):
+            path = os.path.join(root, name)
+            if os.path.isfile(os.path.join(path, "contract.json")):
+                candidates.append((os.path.getmtime(path), path))
+    if not candidates:
+        raise UsageError(f"no run found under {root}; create one with: run_log.py init --contract FILE")
+    return max(candidates)[1]
+
+
+def load_run(run_dir: str) -> tuple[dict, list[dict]]:
+    with open(os.path.join(run_dir, "contract.json"), encoding="utf-8") as handle:
+        contract = json.load(handle)
+    records = []
+    with open(os.path.join(run_dir, "rows.jsonl"), encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                records.append(json.loads(line))
+    return contract, records
+
+
+def append_record(run_dir: str, record: dict) -> None:
+    with open(os.path.join(run_dir, "rows.jsonl"), "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _superseded(records: list[dict]) -> set[str]:
+    return {r["supersedes"] for r in records if r.get("type") == "row" and r.get("supersedes")}
+
+
 # --------------------------------------------------------------------------- commands
 
 def _read_json(path: str):
@@ -287,6 +511,25 @@ def cmd_init(args) -> int:
     return EXIT_OK
 
 
+def cmd_add(args) -> int:
+    run_dir = resolve_run_dir(args.run)
+    row = _read_json(args.row)
+    contract, records = load_run(run_dir)
+    errors = validate_row(row, contract)
+    ids = {r["id"] for r in records if r.get("type") == "row"}
+    if isinstance(row, dict) and row.get("supersedes") and row["supersedes"] not in ids:
+        errors.append(f"supersedes names {row['supersedes']}, which is not in this run")
+    if errors:
+        raise UsageError("invalid row (nothing saved):\n" + "\n".join(f"  - {e}" for e in errors))
+    row_id = f"r{len(ids) + 1}"
+    record = dict(row, type="row", id=row_id,
+                  added_at=datetime.now().astimezone().isoformat(timespec="seconds"))
+    append_record(run_dir, record)
+    status, reasons = row_status(record, contract, _superseded(records + [record]))
+    print(f"{row_id} {status}" + (": " + "; ".join(reasons) if reasons else ""))
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -294,6 +537,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--contract", required=True, help="contract JSON file, or - for stdin")
     p.add_argument("--runs-root", help="directory holding runs (default: see module docstring)")
     p.set_defaults(func=cmd_init)
+    p = sub.add_parser("add", help="append one observation row (saved immediately)")
+    p.add_argument("--row", required=True, help="row JSON file, or - for stdin")
+    p.add_argument("--run", help="run directory (default: most recent run)")
+    p.set_defaults(func=cmd_add)
     return parser
 
 
