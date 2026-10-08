@@ -46,6 +46,10 @@ Booking.com Flights and Alternative Airlines can expose broad inventory and some
 
 Do not rank an OTA teaser above airline-direct unless the exact itinerary survives checkout repricing. Record the merchant of record and avoid equating flexible-ticket insurance with an airline-flexible fare.
 
+## Route discovery (no fares)
+
+**FlightConnections** (`https://www.flightconnections.com/flights-from-<city>-<iata>`, ledger role `routes`) lists every non-stop destination and airline from an airport. Use it to choose nearby-airport and open-jaw candidates (which airlines fly non-stop from BSL or GVA to the destination) before pricing them elsewhere. It never prices a fare. Worked headless on 2026-10-08.
+
 ## Partially usable sources (pragmatic tier)
 
 - **AZair** (`azair.eu`) — loads without a bot wall; scope is low-cost carriers only (Europe/Mediterranean/Asia). Good for LCC route-hack discovery, cannot answer long-haul networks. See `references/azair-browser.md`.

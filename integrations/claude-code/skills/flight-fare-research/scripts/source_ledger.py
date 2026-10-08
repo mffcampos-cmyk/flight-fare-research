@@ -106,6 +106,35 @@ REGISTRY = [
 ]
 
 
+# Expansion probe, 2026-10-08: one paced attempt per source on the canary
+# (ZRH-LIS 2026-11-07/14) with headless Playwright Chromium behind a datacenter
+# egress proxy (browser ladder rung 3). Blocks here say nothing about the
+# user's own browser; see references/source-health.md.
+PROBE_ENGINE, PROBE_DATE = "headless-playwright", "2026-10-08"
+PROBE = {
+    "google-flights": ("ok", "seed: headless probe, ?q= link repeated the search; 10 round-trip cards in CHF"),
+    "tap-direct": ("ok", "seed: headless probe, deep link repeated the search; 5 direct flights, CHF per direction"),
+    "flightconnections": ("ok", "seed: headless probe, flights-from-zurich-zrh: 218 destinations, 61 airlines"),
+    "booking-flights": ("empty", "seed: headless probe, form repeated the search; 'no flights matching' after 45 s"),
+    "kiwi": ("empty", "seed: headless probe, deep link loaded (no 403); no results after 45 s"),
+    "aviasales": ("empty", "seed: headless probe, deep link repeated route/dates; results never rendered"),
+    "kayak": ("blocked", "seed: headless probe, 'Was ist ein Bot?' bot page"),
+    "momondo": ("blocked", "seed: headless probe, 'Was ist ein Bot?' bot page"),
+    "skyscanner": ("blocked", "seed: headless probe, 'Are you a person or a robot?' press-and-hold"),
+    "expedia": ("blocked", "seed: headless probe, HTTP 429 'Bot oder Mensch?'"),
+    "trip-com": ("blocked", "seed: headless probe, HTTP 432 'whaleguard block'"),
+    "easyjet-direct": ("blocked", "seed: headless probe, HTTP 403 Access Denied on deep link"),
+    "lastminute": ("blocked", "seed: headless probe, HTTP 403 Cloudflare challenge"),
+    "swiss-direct": ("blocked", "seed: headless probe, HTTP 403 'Security check'"),
+    "lufthansa-direct": ("blocked", "seed: headless probe, HTTP 403 'Security check'"),
+    "iberia-direct": ("blocked", "seed: headless probe, HTTP 403 'connection was interrupted'"),
+    "icelandair-direct": ("blocked", "seed: headless probe, HTTP 403 Cloudflare challenge"),
+    "qatar-direct": ("blocked", "seed: headless probe, HTTP 403 Access Denied"),
+    "sbb": ("blocked", "seed: headless probe, HTTP 403 with empty body"),
+    "omio": ("blocked", "seed: headless probe, HTTP 403 Cloudflare challenge"),
+}
+
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -113,12 +142,15 @@ def now_iso():
 def seed():
     sources = {}
     for sid, name, role, fam, core, url, st, d, ev in REGISTRY:
+        engine = None
+        if sid in PROBE:
+            (st, ev), d, engine = PROBE[sid], PROBE_DATE, PROBE_ENGINE
         checked = f"{d}T12:00:00+00:00" if d else None
         entry = {"name": name, "role": role, "family": fam, "core": core, "url": url,
                  "state": st, "checked_at": checked, "evidence": ev, "results": None,
-                 "engine": None, "history": []}
+                 "engine": engine, "history": []}
         if st:
-            entry["history"].append({"state": st, "checked_at": checked, "evidence": ev})
+            entry["history"].append({"state": st, "checked_at": checked, "evidence": ev, "engine": engine})
         sources[sid] = entry
     return {"version": 1, "canary": CANARY, "sources": sources}
 

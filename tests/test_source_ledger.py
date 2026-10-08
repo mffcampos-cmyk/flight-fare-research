@@ -157,8 +157,12 @@ def test_add_refuses_existing_id(ledger):
     assert rc == 2 and "already" in err
 
 def test_candidates_registered_untested(ledger):
+    run("status", ledger=ledger)
+    assert CANDIDATES <= set(json.loads(ledger.read_text())["sources"])
     order = json.loads(run("order", "--json", ledger=ledger)[1])
-    assert CANDIDATES <= {u["id"] for u in order["untested"]}
+    unprobed = {"gotogate", "opodo", "ryanair-direct", "vueling-direct", "klm-direct",
+                "airfrance-direct", "british-airways-direct", "turkish-direct", "trainline"}
+    assert unprobed <= {u["id"] for u in order["untested"]}
 
 def test_candidate_families_and_roles(ledger):
     run("status", ledger=ledger)
@@ -173,3 +177,12 @@ def test_naive_timestamp_treated_as_utc(ledger):
     ledger.write_text(json.dumps(data))
     rc, _, err = run("status", ledger=ledger)
     assert rc in (0, 3) and "Traceback" not in err
+
+
+def test_probe_seeds_carry_their_engine(ledger):
+    run("status", ledger=ledger)
+    src = json.loads(ledger.read_text())["sources"]
+    assert src["flightconnections"]["state"] == "ok" and src["flightconnections"]["engine"] == "headless-playwright"
+    assert src["swiss-direct"]["state"] == "blocked" and src["swiss-direct"]["engine"] == "headless-playwright"
+    assert src["swiss-direct"]["history"][0]["engine"] == "headless-playwright"
+    assert src["edreams"]["engine"] is None  # older seeds predate engine tracking

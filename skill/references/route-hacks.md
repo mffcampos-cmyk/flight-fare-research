@@ -85,6 +85,9 @@ rows are all rejected or pruned is finished.
 Leads from the web are ideas to price, never prices. Reprice every one on the
 exact dates, then add it as a row.
 
+0. **Which routes exist:** for each nearby or alternative airport, read its
+   FlightConnections page (`source-ladder.md`) to see which airlines fly
+   non-stop to the destination; price only those.
 1. **Broad, keyless:** one short web search per hack type, run in parallel:
    `<carrier> stopover program <hub>`, `fifth freedom flights <region> <destination>`,
    `new route <origin> <destination> <season>`, `<airline> sale <month year>`,

@@ -61,3 +61,36 @@ Momondo: not an independent family.
 | FlightList | 100 exact-date cards; both durations parsed, all under a 20-hour cap; list fares, bags unverified |
 | Google Flights | completed provider card €353 (list €355), easyJet + Vueling on separate tickets; bag fee required; return arrives 11 Oct |
 | eDreams | six exact-date cards; sample SWISS regular €500 vs Prime €416; bags unverified |
+
+## Expansion probe (2026-10-08, headless Playwright Chromium, datacenter egress proxy)
+
+Canary ZRH⇄LIS 7–14 Nov 2026, 1 adult, economy. One paced attempt per source,
+optional cookies declined, no retries after a challenge (three still-loading
+pages got one longer wait). This is browser ladder rung 3, the most likely to be
+challenged: a block here says nothing about the user's own browser.
+
+| Source | Result |
+|---|---|
+| Google Flights (`?q=` link) | ok: search repeated, 10 round-trip cards in CHF (nonstop TAP/SWISS from CHF 134) |
+| TAP direct (deep link) | ok: search repeated, 5 direct flights, CHF per direction |
+| FlightConnections (`flights-from-zurich-zrh`) | ok (routes): 218 destinations, 61 airlines, non-stop filters |
+| Booking.com Flights (deep link) | empty: form repeated the search, then "We don't have any flights matching your search" |
+| Kiwi direct (deep link) | empty: page loads (was HTTP 403 on 2026-09-20), filters shown, no results after 45 s |
+| Aviasales (deep link) | empty: route and dates repeated, results never rendered |
+| KAYAK, Momondo | blocked: "Was ist ein Bot?" |
+| Skyscanner | blocked: press-and-hold "Are you a person or a robot?" |
+| Expedia | blocked: HTTP 429 "Bot oder Mensch?" |
+| Trip.com | blocked: HTTP 432 "whaleguard block" |
+| easyJet (deep link) | blocked: HTTP 403 Access Denied |
+| lastminute.com, Icelandair, Omio | blocked: Cloudflare challenge |
+| SWISS, Lufthansa | blocked: HTTP 403 "Security check" |
+| Iberia | blocked: HTTP 403 "connection was interrupted" |
+| Qatar Airways | blocked: HTTP 403 Access Denied |
+| SBB | blocked: HTTP 403, empty body |
+| Alternative Airlines, Gotogate, Opodo, AZair, Ryanair, Vueling, Trainline | homepage loads; search flow not driven (still untested) |
+| British Airways | "high demand" holding page (untested) |
+| KLM, Air France, Turkish Airlines | not reached: the environment's proxy reported "upstream request failed" (untested) |
+
+Takeaways: airline and rail sites guard headless sessions hardest, so price
+them in the user's own browser (rung 1). Kiwi direct and Booking.com load
+headless but returned no fares; try them on rung 1 before relying on them.
