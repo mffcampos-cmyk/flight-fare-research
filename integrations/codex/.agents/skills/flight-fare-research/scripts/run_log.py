@@ -506,6 +506,72 @@ def rank(contract: dict, records: list[dict], cabin: str | None = None) -> dict:
     return result
 
 
+def _plural_families(n: int) -> str:
+    return f"{n} source family attempted" if n == 1 else f"{n} source families attempted"
+
+
+def cell_states(contract: dict, records: list[dict]) -> list[dict]:
+    """Open/done/resolved state of every expected comparison."""
+    cells = contract.get("cells") or build_cells(contract)
+    evaluated = [e for e in evaluate(contract, records) if e["status"] != "superseded"]
+    ranked = rank(contract, records)
+    pruned = {lead["id"]: lead["pruned"] for v in ranked.values() for lead in v["leads"]}
+    resolutions = {}
+    for r in records:
+        if r.get("type") == "resolve":
+            resolutions[r["cell"]] = f"{r['as']}: {r['reason']}"
+    states = []
+    for cell in cells:
+        cab = cell["cabin"]
+        in_cell = [e for e in evaluated if e["cell"] == cell["id"]]
+        in_cabin = [e for e in evaluated if e["cabin"] == cab]
+        populated = [e for e in in_cell if e["status"] != "attempt"]
+        if cell["id"] in resolutions:
+            state, why = "resolved", resolutions[cell["id"]]
+        elif cell.get("auto"):
+            state, why = "resolved", f"{cell['auto']['as']}: {cell['auto']['reason']}"
+        elif cell["kind"] == "crosscheck":
+            n = len({e["row"].get("family") for e in in_cabin})
+            state, why = ("done", "") if n >= 2 else ("open", _plural_families(n))
+            in_cell = in_cabin
+        elif cell["kind"] == "reprice":
+            ok = any(e["status"] == "qualified" for e in in_cabin)
+            state, why = ("done", "") if ok else ("open", "no qualified option")
+            in_cell = [e for e in in_cabin if e["status"] == "qualified"]
+        elif not in_cell:
+            state, why = "open", "not attempted"
+        elif not populated:
+            state, why = "open", "only blocked/empty/error attempts"
+        elif cell["kind"] == "baseline" or any(e["status"] == "qualified" for e in populated):
+            state, why = "done", ""
+        else:
+            unresolved = [e["id"] for e in populated if e["status"] == "lead" and not pruned.get(e["id"])]
+            state, why = ("open", f"unresolved lead(s): {', '.join(unresolved)}") if unresolved else ("done", "")
+        states.append({"id": cell["id"], "kind": cell["kind"], "cabin": cab, "state": state,
+                       "why": why, "rows": len(in_cell)})
+    return states
+
+
+def check(contract: dict, records: list[dict]) -> dict:
+    """Is the run complete? Lists open comparisons, closed-without-result cells and warnings."""
+    states = cell_states(contract, records)
+    warn = []
+    evaluated = [e for e in evaluate(contract, records) if e["status"] != "superseded"]
+    for cab, v in rank(contract, records).items():
+        if v["best"] is not None:
+            warn.extend(f"{cab}: lead {lead['id']} may beat best qualified "
+                        f"(LB {lead['lower_bound']:.2f} < {v['best']:.2f})"
+                        for lead in v["leads"] if not lead["pruned"])
+        families = sorted({e["row"].get("family") for e in evaluated
+                           if e["cabin"] == cab and e["status"] != "attempt"})
+        if len(families) == 1:
+            warn.append(f"{cab}: only one source family returned results ({families[0]})")
+    open_items = [{"cell": s["id"], "why": s["why"]} for s in states if s["state"] == "open"]
+    return {"complete": not open_items, "open": open_items,
+            "resolved": [{"cell": s["id"], "why": s["why"]} for s in states if s["state"] == "resolved"],
+            "warn": warn}
+
+
 # --------------------------------------------------------------------------- storage
 
 def resolve_run_dir(arg: str | None) -> str:
@@ -528,16 +594,35 @@ def resolve_run_dir(arg: str | None) -> str:
 def load_run(run_dir: str) -> tuple[dict, list[dict]]:
     with open(os.path.join(run_dir, "contract.json"), encoding="utf-8") as handle:
         contract = json.load(handle)
-    records = []
     with open(os.path.join(run_dir, "rows.jsonl"), encoding="utf-8") as handle:
-        for line in handle:
-            if line.strip():
-                records.append(json.loads(line))
+        lines = [(n, line) for n, line in enumerate(handle.read().split("\n"), 1) if line.strip()]
+    records = []
+    for i, (n, line) in enumerate(lines):
+        try:
+            records.append(json.loads(line))
+        except ValueError:
+            if i == len(lines) - 1:
+                print(f"warning: ignoring truncated last line {n} of rows.jsonl", file=sys.stderr)
+                continue
+            raise ValueError(f"rows.jsonl line {n} is not valid JSON; repair or remove it")
     return contract, records
 
 
+def _trim_partial_tail(path: str) -> None:
+    """Drop an unterminated last line left by an interrupted write."""
+    with open(path, "rb+") as handle:
+        data = handle.read()
+        if data and not data.endswith(b"\n"):
+            keep = data.rfind(b"\n") + 1
+            handle.seek(keep)
+            handle.truncate()
+            print("warning: removed a truncated last line from rows.jsonl", file=sys.stderr)
+
+
 def append_record(run_dir: str, record: dict) -> None:
-    with open(os.path.join(run_dir, "rows.jsonl"), "a", encoding="utf-8") as handle:
+    path = os.path.join(run_dir, "rows.jsonl")
+    _trim_partial_tail(path)
+    with open(path, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, ensure_ascii=False) + "\n")
         handle.flush()
         os.fsync(handle.fileno())
@@ -640,6 +725,48 @@ def cmd_rank(args) -> int:
     return EXIT_OK
 
 
+def cmd_resolve(args) -> int:
+    run_dir = resolve_run_dir(args.run)
+    contract, _ = load_run(run_dir)
+    ids = [c["id"] for c in contract.get("cells") or build_cells(contract)]
+    if args.cell not in ids:
+        raise UsageError(f"unknown cell {args.cell}; see run_log.py coverage")
+    append_record(run_dir, {"type": "resolve", "cell": args.cell, "as": getattr(args, "as"),
+                            "reason": args.reason,
+                            "at": datetime.now().astimezone().isoformat(timespec="seconds")})
+    print(f"resolved {args.cell} as {getattr(args, 'as')}: {args.reason}")
+    return EXIT_OK
+
+
+def cmd_coverage(args) -> int:
+    contract, records = load_run(resolve_run_dir(args.run))
+    states = cell_states(contract, records)
+    if args.json:
+        print(json.dumps(states, indent=2, ensure_ascii=False))
+        return EXIT_OK
+    for s in states:
+        print(f"{s['state']:<9}{s['id']}  rows={s['rows']}  {s['why']}".rstrip())
+    closed = sum(1 for s in states if s["state"] != "open")
+    print(f"{closed}/{len(states)} cells closed")
+    return EXIT_OK
+
+
+def cmd_check(args) -> int:
+    contract, records = load_run(resolve_run_dir(args.run))
+    result = check(contract, records)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print("COMPLETE" if result["complete"] else f"INCOMPLETE: {len(result['open'])} open item(s)")
+        for item in result["open"]:
+            print(f"OPEN      {item['cell']}  {item['why']}")
+        for item in result["resolved"]:
+            print(f"RESOLVED  {item['cell']}  {item['why']}")
+        for msg in result["warn"]:
+            print(f"WARN      {msg}")
+    return EXIT_OK if result["complete"] else EXIT_INCOMPLETE
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -656,6 +783,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--cabin", help="only this cabin")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_rank)
+    p = sub.add_parser("resolve", help="close a comparison that legitimately has no qualified row")
+    p.add_argument("cell", help="cell id from coverage")
+    p.add_argument("--as", required=True, choices=("na", "no_fare", "none_qualify"))
+    p.add_argument("--reason", required=True)
+    p.add_argument("--run", help="run directory (default: most recent run)")
+    p.set_defaults(func=cmd_resolve)
+    p = sub.add_parser("coverage", help="expected comparisons and their state")
+    p.add_argument("--run", help="run directory (default: most recent run)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_coverage)
+    p = sub.add_parser("check", help="exit 0 when complete, 4 while comparisons are open")
+    p.add_argument("--run", help="run directory (default: most recent run)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_check)
     return parser
 
 
@@ -663,7 +804,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except UsageError as exc:
+    except (UsageError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
