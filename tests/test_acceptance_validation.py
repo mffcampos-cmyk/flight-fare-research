@@ -1,5 +1,7 @@
 """Acceptance checks exercise the CLI on isolated, regenerated fixtures."""
 import json
+import zipfile
+
 import pytest
 from tests.test_packaging import project, run_script
 
@@ -72,7 +74,41 @@ def test_invalid_claude_plugin_schema_fails(project, body):
 
 def test_valid_claude_plugin_schema_passes(project):
     plugin = project / "integrations/claude-code/.claude-plugin/plugin.json"
-    plugin.write_text('{"name": "flight-fare-research",'
-                      ' "description": "desc", "version": "1.2.3"}')
+    import re
+    version = re.search(r"^version: (\S+)$", (project / "skill/SKILL.md").read_text(), re.M).group(1)
+    plugin.write_text(json.dumps({"name": "flight-fare-research", "description": "desc", "version": version}))
     result = validate(project)
     assert result.returncode == 0, result.stderr
+
+
+def test_version_mismatch_fails(project):
+    plugin = project / "integrations/claude-code/.claude-plugin/plugin.json"
+    data = json.loads(plugin.read_text()); data["version"] = "9.9.9"
+    plugin.write_text(json.dumps(data))
+    result = validate(project)
+    assert result.returncode == 1 and "version" in result.stderr and "9.9.9" in result.stderr
+
+
+def test_broken_script_fails(project):
+    (project / "skill/scripts/run_log.py").write_text("def broken(:\n")
+    result = validate(project)
+    assert result.returncode == 1 and "run_log.py" in result.stderr
+
+
+def test_zip_drift_fails(project):
+    assert run_script(project, "package.py").returncode == 0
+    for base in ("skill", "integrations/codex/.agents/skills/flight-fare-research",
+                 "integrations/claude-code/skills/flight-fare-research"):
+        (project / base / "references/azair-browser.md").write_text("changed")
+    result = run_script(project, "validate.py", "--strict")
+    assert result.returncode == 1 and "zip" in result.stderr
+
+
+def test_bytecode_is_never_packaged(project):
+    (project / "skill/scripts/__pycache__").mkdir()
+    (project / "skill/scripts/__pycache__/run_log.cpython-313.pyc").write_bytes(b"x")
+    assert run_script(project, "package.py").returncode == 0
+    names = zipfile.ZipFile(project / "dist/flight-fare-research-cowork.zip").namelist()
+    assert not any("__pycache__" in n for n in names)
+    assert not (project / "integrations/claude-code/skills/flight-fare-research/scripts/__pycache__").exists()
+    assert run_script(project, "validate.py", "--strict").returncode == 0
