@@ -77,7 +77,9 @@ def test_resolve_unknown_cell_is_usage_error(run):
     r = cli("resolve", "economy/hack/teleport", "--as", "na", "--reason", "x", "--run", run)
     assert r.returncode == 2
 
-def test_resolve_appends_record(run):
+def test_resolve_appends_record(run, tmp_path):
+    over_cap = row(directions=[direction("out", duration="21:00:00"), direction("ret")])
+    cli("add", "--run", run, "--row", write_json(tmp_path / "a.json", over_cap))
     assert cli("resolve", "economy/reprice", "--as", "none_qualify", "--reason", "all over cap", "--run", run).returncode == 0
     assert "RESOLVED  economy/reprice  none_qualify: all over cap" in cli("check", "--run", run).stdout
 

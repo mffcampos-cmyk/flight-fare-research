@@ -53,8 +53,8 @@ These are the moments the rule bends under pressure, and what to do instead:
 
 Ask once, in one message, for whatever the user has not said, giving the default
 you will use for each: route and acceptable airports; exact dates or a range
-plus trip length; travellers with children's ages; cabins; checked bags per
-person; currency; journey-time limit per direction (strict or inclusive);
+plus trip length; travellers with children's ages; cabins; checked bags and
+full-size cabin bags per person; currency; journey-time limit per direction (strict or inclusive);
 other departure or arrival airports and how to reach them (rail, extra cost,
 night before); whether self-transfer connections on separate tickets are
 acceptable; any fixed event or arrival deadline. The template, defaults and
@@ -63,7 +63,9 @@ contract format are in `references/intake.md`.
 If the user says "just go", or the run is unattended, use the defaults and
 record each in the contract's `assumptions`.
 
-Done when `run_log.py init --contract FILE` exits 0.
+Done when `run_log.py init --contract FILE` exits 0. It prints the run
+directory: pass it as `--run <dir>` to every later `run_log.py` command, so
+parallel sessions never write into each other's run.
 
 ## 2. Scope
 
@@ -83,7 +85,9 @@ scope to the user.
    credentials already configured, use the official APIs in
    `references/source-ladder.md`. Never ask for secrets in chat.
 2. **Source health (full path).** Run `source_ledger.py status`; on exit 3
-   probe only the listed sources with the canary, then run `order`
+   probe only the listed sources with the canary, then run
+   `order --engine <your engine>`, which marks sources that failed only on a
+   lower-rung browser as worth one re-probe
    (`references/source-health.md`). Canary prices are never fare evidence.
 3. **Browser.** Use the highest-rung engine available and pace searches like a
    person (`references/browser-engines.md`).
@@ -111,7 +115,9 @@ Test each permitted hack for each cabin: split one-ways, open-jaw or
 multi-city, nearby departure airports, alternative arrival airports, and a
 stopover when asked. Price the whole trip: tickets, bags, positioning both
 ways, unavoidable hotel nights and transfers. An unpriced part keeps the hack a
-lead; show its break-even instead of a total. Use `run_log.py rank` to skip
+lead; show its break-even instead of a total. Record each combination as one
+row holding every ticket it needs, with its `out` and `ret` legs and the run's
+date pair; `add` refuses rows for a different search. Use `run_log.py rank` to skip
 leads that cannot beat the best qualified total. Details, timing risks and
 stopover construction: `references/route-hacks.md`.
 
@@ -129,7 +135,10 @@ remaining all-in part. A reprice is a new row that `supersedes` the list row.
 
 Done when `rank` shows a qualified best option in every requested cabin, or
 you have closed that cabin's `reprice` comparison with
-`run_log.py resolve <cell> --as none_qualify --reason …`.
+`run_log.py resolve <cell> --as none_qualify --reason …` (allowed once a priced
+candidate exists). The other closures: `no_fare` after an executed search
+returned no published fare, and `na` when a comparison cannot apply; every
+closure appears in `check` and in the report.
 
 ## 6. Cross-check and report
 

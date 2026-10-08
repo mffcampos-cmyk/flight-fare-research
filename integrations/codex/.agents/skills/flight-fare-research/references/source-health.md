@@ -16,7 +16,7 @@ At the start of every full-path run:
 ```bash
 S=<skill_dir>/scripts/source_ledger.py
 python3 $S status    # exit 0: fresh, skip probing; exit 3: probe the core sources listed
-python3 $S order     # USE / UNTESTED / AVOID for this run, with the engine of each state
+python3 $S order --engine claude-in-chrome   # USE / UNTESTED / RE-PROBE / AVOID for your engine
 ```
 
 Probe only the sources under `PROBE NEEDED`. Quick runs skip the gate but

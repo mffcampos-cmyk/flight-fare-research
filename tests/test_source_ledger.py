@@ -186,3 +186,13 @@ def test_probe_seeds_carry_their_engine(ledger):
     assert src["swiss-direct"]["state"] == "blocked" and src["swiss-direct"]["engine"] == "headless-playwright"
     assert src["swiss-direct"]["history"][0]["engine"] == "headless-playwright"
     assert src["edreams"]["engine"] is None  # older seeds predate engine tracking
+
+
+def test_order_engine_allows_reprobe_of_lower_rung_blocks(ledger):
+    run("record", "kayak", "blocked", "--evidence", "x", "--engine", "headless-playwright", ledger=ledger)
+    plain = json.loads(run("order", "--json", ledger=ledger)[1])
+    assert "kayak" in [s["id"] for s in plain["avoid"]]
+    rung1 = json.loads(run("order", "--json", "--engine", "claude-in-chrome", ledger=ledger)[1])
+    assert "kayak" in [s["id"] for s in rung1["reprobe"]] and "kayak" not in [s["id"] for s in rung1["avoid"]]
+    same = json.loads(run("order", "--json", "--engine", "headless-playwright", ledger=ledger)[1])
+    assert "kayak" in [s["id"] for s in same["avoid"]]

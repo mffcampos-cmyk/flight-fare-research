@@ -22,6 +22,10 @@ set; `run_log.py coverage` shows what is still open.
 Fare-family arbitrage (airline direct vs aggregator vs branded families) is part
 of qualification, not a separate hack: see `qualification.md`.
 
+Record each tested combination as one row: every ticket it needs, all its legs,
+and the run's date pair (for example a split is one row with two one-way
+tickets). Rows for a different search are refused by `add`.
+
 ## All-in and break-even
 
 All-in = tickets + bag fees for the requested bags + positioning (both ways) +

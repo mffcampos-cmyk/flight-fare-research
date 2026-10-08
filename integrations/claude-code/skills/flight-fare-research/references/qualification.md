@@ -32,6 +32,10 @@ and any lead reasons after each row.
      zero (`1st checked bag: CHF 0–104`), which proves neither inclusion nor a
      fee.
 
+   When the contract asks for full-size cabin bags (`cabin_per_person` > 0),
+   record `cabin_bag` per ticket the same way (`included`, `fee_required` with
+   `cabin_bag_fee`, `unverified`).
+
    Airline norms, cabin expectations, a friend's advice and generic policy
    pages explain which fare family to pick; only the completed page or fare
    family sets the state. Separate tickets each need their own bag line; one
@@ -78,7 +82,13 @@ section of the report).
  "components": {}, "notes": "Classic family both ways"}
 ```
 
-Save it with `run_log.py add --row FILE` (or `--row -` from stdin) the moment
+One row is one bookable combination: a round trip on one ticket, or a split,
+open-jaw or stopover with every ticket it needs (each ticket with its own price,
+quote state and bag line) and all its legs (`out` and `ret`; a stopover has
+several legs in one direction). `add` refuses rows whose cabin, dates or
+airports differ from the run's contract.
+
+Save it with `run_log.py add --run <dir> --row FILE` (or `--row -` from stdin) the moment
 you have read the page; rows are append-only, so a crash loses nothing.
 Attempts that showed no fare go in too, with `"outcome": "blocked"`, `"empty"`
 or `"error"`.
@@ -95,3 +105,16 @@ or `"error"`.
 | `positioning unpriced` (any part) | Price the train/flight/hotel on its own site |
 | `currency differs; no fx recorded` | Add `fx` with rate, date and source |
 | `per-person price with infants; record the total` | Record the booking total |
+| `cabin bag unverified` / `cabin bag fee unknown` | Read the cabin-bag allowance or fee on the seller's page |
+
+## Closing a comparison without a qualified row
+
+`run_log.py resolve <cell> --as <kind> --reason "…"` closes one comparison:
+
+- `no_fare`: a baseline or hack search ran and returned no published fare (an
+  `empty` or populated row must exist; a blocked page is not a search).
+- `none_qualify`: a cabin's `reprice` comparison when priced candidates exist
+  but none can qualify (all over the cap, or every seller blocked).
+- `na`: the comparison cannot apply to this trip; say why.
+
+Every closure is listed by `check` and must appear in the report.

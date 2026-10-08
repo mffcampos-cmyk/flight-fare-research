@@ -20,6 +20,7 @@ modified run directory there.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import json
 import os
@@ -151,9 +152,31 @@ def validate_contract(contract: dict) -> list[str]:
     checked = bags.get("checked_per_person") if isinstance(bags, dict) else None
     if not isinstance(checked, int) or isinstance(checked, bool) or checked < 0:
         errors.append("bags.checked_per_person is required: an integer >= 0")
+    cabin_bags = bags.get("cabin_per_person", 0) if isinstance(bags, dict) else 0
+    if not isinstance(cabin_bags, int) or isinstance(cabin_bags, bool) or cabin_bags < 0:
+        errors.append("bags.cabin_per_person must be an integer >= 0 (full-size cabin bags per person)")
+    if isinstance(travelers, dict):
+        ages = travelers.get("children_ages", [])
+        if not isinstance(ages, list) or any(not isinstance(a, int) or isinstance(a, bool) or a < 0 for a in ages):
+            errors.append("travelers.children_ages must be a list of ages (integers)")
+        infants = travelers.get("infants", 0)
+        if not isinstance(infants, int) or isinstance(infants, bool) or infants < 0:
+            errors.append("travelers.infants must be an integer >= 0")
+    for key in ("nearby_origins", "alt_destinations"):
+        value = contract.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+            errors.append(f"{key} must be a list of airport codes")
+    positioning = contract.get("positioning", {})
+    if positioning is not None and (not isinstance(positioning, dict) or any(
+            not isinstance(positioning.get(k, False), bool) for k in ("allowed", "rail_ok", "overnight_ok"))):
+        errors.append("positioning must be an object with true/false allowed, rail_ok, overnight_ok")
+    if not isinstance(contract.get("self_transfer_ok", False), bool):
+        errors.append("self_transfer_ok must be true or false")
     hacks = contract.get("hacks")
     if hacks is not None and (not isinstance(hacks, list) or any(h not in HACKS for h in hacks)):
         errors.append(f"hacks must be drawn from {', '.join(HACKS)}")
+    elif hacks and contract.get("scope") == "quick" and any(h != "nearby_origin" for h in hacks):
+        errors.append("a quick scope tests only nearby_origin; use scope full to compare other hacks")
     cap = contract.get("max_duration")
     if cap is not None:
         try:
@@ -184,6 +207,7 @@ def normalize_contract(contract: dict) -> dict:
     c.setdefault("assumptions", [])
     c["travelers"].setdefault("children_ages", [])
     c["travelers"].setdefault("infants", 0)
+    c["bags"].setdefault("cabin_per_person", 0)
     return c
 
 
@@ -217,14 +241,33 @@ def baseline_cell_id(cabin: str, origin: str, destination: str, outbound: str, r
     return f"{cabin}/baseline/{origin}-{destination}/{dates}"
 
 
+def _origin_pool(c: dict, hack) -> list[str]:
+    """Departure airports a row with this hack may use."""
+    nearby = c["nearby_origins"] if c["positioning"]["allowed"] else []
+    if hack == "nearby_origin":
+        return list(c["nearby_origins"])
+    if hack == "open_jaw":
+        return list(dict.fromkeys(c["origins"] + nearby))
+    return list(c["origins"])
+
+
+def _destination_pool(c: dict, hack) -> list[str]:
+    """Arrival airports a row with this hack may use."""
+    if hack == "alt_destination":
+        return list(c["alt_destinations"])
+    if hack == "open_jaw":
+        return list(dict.fromkeys(c["destinations"] + c["alt_destinations"]))
+    return list(c["destinations"])
+
+
 def _hack_auto(contract: dict, hack: str):
     def na(reason):
         return {"as": "na", "reason": reason}
 
     if hack in ("split", "open_jaw") and contract["trip_type"] == "one_way":
         return na("one-way trip")
-    if hack == "open_jaw" and not contract["alt_destinations"] and not (
-            contract["positioning"]["allowed"] and contract["nearby_origins"]):
+    if hack == "open_jaw" and len(_origin_pool(contract, "open_jaw")) < 2 \
+            and len(_destination_pool(contract, "open_jaw")) < 2:
         return na("no other airport to open the jaw")
     if hack == "nearby_origin":
         if not contract["positioning"]["allowed"]:
@@ -290,6 +333,8 @@ def validate_row(row: dict, contract: dict) -> list[str]:
     if row.get("price_basis", "total") not in PRICE_BASES:
         errors.append(f"price_basis must be one of {', '.join(PRICE_BASES)}")
     if row.get("outcome") != "populated":
+        if row.get("cabin") and row["cabin"] not in normalize_contract(contract)["cabins"]:
+            errors.append("cabin not requested: this attempt is for a cabin outside the run's contract")
         return errors
     errors.extend(f"{field} is required for a populated row" for field in POPULATED_FIELDS
                   if field not in row or row[field] in (None, ""))
@@ -308,8 +353,31 @@ def validate_row(row: dict, contract: dict) -> list[str]:
             errors.append(f"tickets[{n}].baggage must be one of {', '.join(BAGGAGE)}")
         if t.get("bag_fee") is not None and (not _is_number(t["bag_fee"]) or t["bag_fee"] < 0):
             errors.append(f"tickets[{n}].bag_fee must be null or a non-negative number")
-    if "directions" in row and not isinstance(row["directions"], list):
+        if t.get("cabin_bag") is not None and t["cabin_bag"] not in BAGGAGE:
+            errors.append(f"tickets[{n}].cabin_bag must be one of {', '.join(BAGGAGE)}")
+        if t.get("cabin_bag_fee") is not None and (not _is_number(t["cabin_bag_fee"]) or t["cabin_bag_fee"] < 0):
+            errors.append(f"tickets[{n}].cabin_bag_fee must be null or a non-negative number")
+    directions = row.get("directions")
+    if "directions" in row and not isinstance(directions, list):
         errors.append("directions must be a list")
+    for n, d in enumerate(directions if isinstance(directions, list) else [], 1):
+        if not isinstance(d, dict):
+            errors.append(f"directions[{n}] must be an object")
+            continue
+        if d.get("dir") not in ("out", "ret"):
+            errors.append(f"directions[{n}].dir must be out or ret (a stopover uses several out or ret legs)")
+        if d.get("duration") is not None:
+            try:
+                duration_to_seconds(d["duration"])
+            except ValueError:
+                errors.append(f"directions[{n}].duration must be HH:MM:SS, or null if not shown")
+        if d.get("stops") is not None and (not isinstance(d["stops"], int) or isinstance(d["stops"], bool)
+                                           or d["stops"] < 0):
+            errors.append(f"directions[{n}].stops must be an integer >= 0")
+        errors.extend(f"directions[{n}].{k} must be true or false" for k in ("airport_change", "self_transfer")
+                      if k in d and not isinstance(d[k], bool))
+        errors.extend(f"directions[{n}].{k} must be an airport-local timestamp string" for k in ("dep", "arr")
+                      if d.get(k) is not None and not isinstance(d[k], str))
     components = row.get("components") or {}
     if not isinstance(components, dict):
         errors.append("components must be an object")
@@ -319,6 +387,13 @@ def validate_row(row: dict, contract: dict) -> list[str]:
     fx = row.get("fx")
     if fx is not None and (not isinstance(fx, dict) or not _is_number(fx.get("rate")) or fx["rate"] <= 0):
         errors.append("fx must be null or {\"rate\": number > 0, \"date\": ..., \"source\": ...}")
+    if not errors:
+        c = normalize_contract(contract)
+        mismatch = _contract_mismatch(row, c)
+        errors.extend(f"{m}: this row describes a different search than the run's contract" for m in mismatch)
+        if mismatch and row.get("hack"):
+            errors.append(f"record a {row['hack']} as one row per combination: every ticket of the combination, "
+                          "out and ret directions, and the run's date pair")
     return errors
 
 
@@ -327,6 +402,21 @@ def row_cell_id(row: dict) -> str:
         return f"{row.get('cabin')}/hack/{row['hack']}"
     return baseline_cell_id(row.get("cabin"), row.get("origin"), row.get("destination"),
                             row.get("outbound_date"), row.get("return_date"))
+
+
+def _contract_mismatch(row: dict, c: dict) -> list[str]:
+    """Reasons a populated row describes a different search than the contract."""
+    reasons = []
+    if row.get("cabin") not in c["cabins"]:
+        reasons.append("cabin not requested")
+    pair = [row.get("outbound_date"), row.get("return_date") if c["trip_type"] == "return" else None]
+    if pair not in expand_dates(c["dates"], c["trip_type"]):
+        reasons.append("dates not in contract")
+    if row.get("origin") not in _origin_pool(c, row.get("hack")):
+        reasons.append("origin not in contract")
+    if row.get("destination") not in _destination_pool(c, row.get("hack")):
+        reasons.append("destination not in contract")
+    return reasons
 
 
 def _hard_gate_reasons(row: dict, c: dict) -> list[str]:
@@ -344,23 +434,8 @@ def _hard_gate_reasons(row: dict, c: dict) -> list[str]:
                 reasons.append(f"{d.get('dir')} duration {d['duration']} breaks {kind} cap {cap['value']}")
     if not c["self_transfer_ok"] and any(d.get("self_transfer") for d in row.get("directions") or []):
         reasons.append("self-transfer not allowed")
-    if row.get("cabin") not in c["cabins"]:
-        reasons.append("cabin not requested")
-    pair = [row.get("outbound_date"), row.get("return_date") if c["trip_type"] == "return" else None]
-    if pair not in expand_dates(c["dates"], c["trip_type"]):
-        reasons.append("dates not in contract")
+    reasons.extend(_contract_mismatch(row, c))
     hack = row.get("hack")
-    origins = c["nearby_origins"] if hack == "nearby_origin" else c["origins"]
-    if row.get("origin") not in origins:
-        reasons.append("origin not in contract")
-    if hack == "alt_destination":
-        destinations = c["alt_destinations"]
-    elif hack == "open_jaw":
-        destinations = c["destinations"] + c["alt_destinations"]
-    else:
-        destinations = c["destinations"]
-    if row.get("destination") not in destinations:
-        reasons.append("destination not in contract")
     components = row.get("components") or {}
     if not c["positioning"]["allowed"] and (hack == "nearby_origin" or "positioning" in components):
         reasons.append("positioning not allowed")
@@ -390,6 +465,11 @@ def _lead_reasons(row: dict, c: dict) -> list[str]:
             reasons.append("baggage unverified")
         if any(t.get("baggage") == "fee_required" and t.get("bag_fee") is None for t in tickets):
             reasons.append("bag fee unknown")
+    if c["bags"]["cabin_per_person"] > 0:
+        if any(t.get("cabin_bag") in (None, "unverified") for t in tickets):
+            reasons.append("cabin bag unverified")
+        if any(t.get("cabin_bag") == "fee_required" and t.get("cabin_bag_fee") is None for t in tickets):
+            reasons.append("cabin bag fee unknown")
     reasons.extend(f"{name} unpriced" for name, value in (row.get("components") or {}).items() if value is None)
     if row.get("currency") != c["currency"] and not row.get("fx"):
         reasons.append("currency differs; no fx recorded")
@@ -422,6 +502,8 @@ def _sum_parts(row: dict, c: dict) -> float:
     bags = 0.0
     if c["bags"]["checked_per_person"] > 0:
         bags = sum(t.get("bag_fee") or 0 for t in tickets if t.get("baggage") == "fee_required")
+    if c["bags"]["cabin_per_person"] > 0:
+        bags += sum(t.get("cabin_bag_fee") or 0 for t in tickets if t.get("cabin_bag") == "fee_required")
     extras = sum(v for v in (row.get("components") or {}).values() if v is not None)
     total = fares + bags + extras
     if row.get("fx"):
@@ -493,6 +575,11 @@ def evaluate(contract: dict, records: list[dict]) -> list[dict]:
     return out
 
 
+def _comparable(row: dict, contract: dict) -> bool:
+    """A lead's lower bound is in the contract currency (same currency, or fx recorded)."""
+    return row.get("currency") == contract["currency"] or bool(row.get("fx"))
+
+
 def rank(contract: dict, records: list[dict], cabin: str | None = None) -> dict:
     """Qualified options by all-in total, and leads with their pruning state, per cabin."""
     evaluated = evaluate(contract, records)
@@ -502,9 +589,15 @@ def rank(contract: dict, records: list[dict], cabin: str | None = None) -> dict:
         qualified = sorted((e for e in evaluated if e["cabin"] == cab and e["status"] == "qualified"),
                            key=lambda e: (e["all_in"], *_travel_key(e["row"]), _row_id_key(e["id"])))
         best = qualified[0]["all_in"] if qualified else None
-        leads = sorted((dict(e, pruned=best is not None and e["lower_bound"] >= best)
-                        for e in evaluated if e["cabin"] == cab and e["status"] == "lead"),
-                       key=lambda e: (e["lower_bound"], _row_id_key(e["id"])))
+        leads = []
+        for e in evaluated:
+            if e["cabin"] != cab or e["status"] != "lead":
+                continue
+            comparable = _comparable(e["row"], contract)
+            currency = contract["currency"] if comparable else e["row"].get("currency")
+            leads.append(dict(e, comparable=comparable, currency=currency,
+                              pruned=comparable and best is not None and e["lower_bound"] >= best))
+        leads.sort(key=lambda e: (not e["comparable"], e["lower_bound"], _row_id_key(e["id"])))
         result[cab] = {"best": best, "qualified": qualified, "leads": leads}
     return result
 
@@ -560,14 +653,23 @@ def check(contract: dict, records: list[dict]) -> dict:
     states = cell_states(contract, records)
     warn = []
     evaluated = [e for e in evaluate(contract, records) if e["status"] != "superseded"]
+    cur = contract["currency"]
     for cab, v in rank(contract, records).items():
-        if v["best"] is not None:
-            warn.extend(f"{cab}: lead {lead['id']} may beat best qualified "
-                        f"(LB {lead['lower_bound']:.2f} < {v['best']:.2f})"
-                        for lead in v["leads"] if not lead["pruned"])
+        for lead in v["leads"]:
+            if not lead["comparable"]:
+                if v["best"] is not None:
+                    warn.append(f"{cab}: lead {lead['id']} is priced in {lead['currency']} without fx; "
+                                f"not comparable with best qualified ({v['best']:.2f} {cur})")
+            elif v["best"] is not None and not lead["pruned"]:
+                warn.append(f"{cab}: lead {lead['id']} may beat best qualified "
+                            f"(LB {lead['lower_bound']:.2f} < {v['best']:.2f})")
+        if v["best"] is None and v["leads"]:
+            warn.append(f"{cab}: no qualified option; {len(v['leads'])} lead(s) unverified")
         families = sorted({e["row"].get("family") for e in evaluated
                            if e["cabin"] == cab and e["status"] != "attempt"})
-        if len(families) == 1:
+        if not families:
+            warn.append(f"{cab}: no source family returned results")
+        elif len(families) == 1:
             warn.append(f"{cab}: only one source family returned results ({families[0]})")
     open_items = [{"cell": s["id"], "why": s["why"]} for s in states if s["state"] == "open"]
     return {"complete": not open_items, "open": open_items,
@@ -578,6 +680,13 @@ def check(contract: dict, records: list[dict]) -> dict:
 # --------------------------------------------------------------------------- storage
 
 def resolve_run_dir(arg: str | None) -> str:
+    """The --run directory, else the most recently used run; reported on stderr."""
+    run_dir = _find_run_dir(arg)
+    print(f"run: {run_dir}", file=sys.stderr)
+    return run_dir
+
+
+def _find_run_dir(arg: str | None) -> str:
     if arg:
         if not os.path.isfile(os.path.join(arg, "contract.json")):
             raise UsageError(f"no run at {arg}; create one with: run_log.py init --contract FILE")
@@ -622,6 +731,29 @@ def _trim_partial_tail(path: str) -> None:
             print("warning: removed a truncated last line from rows.jsonl", file=sys.stderr)
 
 
+@contextlib.contextmanager
+def locked(run_dir: str):
+    """Hold an exclusive lock on the run while reading, numbering and appending."""
+    with open(os.path.join(run_dir, ".lock"), "a+") as handle:
+        try:
+            import fcntl
+        except ImportError:  # Windows
+            import msvcrt
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            return
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def append_record(run_dir: str, record: dict) -> None:
     path = os.path.join(run_dir, "rows.jsonl")
     _trim_partial_tail(path)
@@ -629,6 +761,7 @@ def append_record(run_dir: str, record: dict) -> None:
         handle.write(json.dumps(record, ensure_ascii=False) + "\n")
         handle.flush()
         os.fsync(handle.fileno())
+    os.utime(run_dir)  # the default run is the most recently used one
 
 
 def _superseded(records: list[dict]) -> set[str]:
@@ -672,6 +805,11 @@ def cmd_init(args) -> int:
 def cmd_add(args) -> int:
     run_dir = resolve_run_dir(args.run)
     row = _read_json(args.row)
+    with locked(run_dir):
+        return _add(run_dir, row)
+
+
+def _add(run_dir: str, row) -> int:
     contract, records = load_run(run_dir)
     errors = validate_row(row, contract)
     ids = {r["id"] for r in records if r.get("type") == "row"}
@@ -722,21 +860,46 @@ def cmd_rank(args) -> int:
             row = e["row"]
             hack = f" [{row['hack']}]" if row.get("hack") else ""
             pruned = f"  pruned: LB {e['lower_bound']:.2f} >= best {v['best']:.2f}" if e["pruned"] else ""
-            print(f"  {e['id']}{hack} LB {e['lower_bound']:.2f}: {'; '.join(e['reasons'])}{pruned}")
+            note = "" if e["comparable"] else "  (no fx: not comparable)"
+            print(f"  {e['id']}{hack} LB {e['lower_bound']:.2f} {e['currency']}: "
+                  f"{'; '.join(e['reasons'])}{pruned}{note}")
         if not v["leads"]:
             print("  (none)")
     return EXIT_OK
 
 
+def _resolve_guard(cell: dict, kind: str, contract: dict, records: list[dict]) -> str | None:
+    """Why this resolution is not allowed, or None."""
+    rows = [e for e in evaluate(contract, records) if e["status"] != "superseded"]
+    if kind == "no_fare":
+        if cell["kind"] not in ("baseline", "hack"):
+            return "no_fare closes a baseline or hack comparison only"
+        searched = [e for e in rows if e["cell"] == cell["id"]
+                    and (e["status"] != "attempt" or e["row"].get("outcome") == "empty")]
+        if not searched:
+            return ("no_fare needs an executed search in this cell: add the empty or populated result first "
+                    "(blocked or error attempts are not a search)")
+    if kind == "none_qualify":
+        if cell["kind"] != "reprice":
+            return "none_qualify closes a cabin's reprice comparison only"
+        if not any(e["cabin"] == cell["cabin"] and e["status"] != "attempt" for e in rows):
+            return "none_qualify needs at least one priced candidate in this cabin"
+    return None
+
+
 def cmd_resolve(args) -> int:
     run_dir = resolve_run_dir(args.run)
-    contract, _ = load_run(run_dir)
-    ids = [c["id"] for c in contract.get("cells") or build_cells(contract)]
-    if args.cell not in ids:
-        raise UsageError(f"unknown cell {args.cell}; see run_log.py coverage")
-    append_record(run_dir, {"type": "resolve", "cell": args.cell, "as": getattr(args, "as"),
-                            "reason": args.reason,
-                            "at": datetime.now().astimezone().isoformat(timespec="seconds")})
+    with locked(run_dir):
+        contract, records = load_run(run_dir)
+        cells = {c["id"]: c for c in contract.get("cells") or build_cells(contract)}
+        if args.cell not in cells:
+            raise UsageError(f"unknown cell {args.cell}; see run_log.py coverage")
+        refusal = _resolve_guard(cells[args.cell], getattr(args, "as"), contract, records)
+        if refusal:
+            raise UsageError(refusal)
+        append_record(run_dir, {"type": "resolve", "cell": args.cell, "as": getattr(args, "as"),
+                                "reason": args.reason,
+                                "at": datetime.now().astimezone().isoformat(timespec="seconds")})
     print(f"resolved {args.cell} as {getattr(args, 'as')}: {args.reason}")
     return EXIT_OK
 
@@ -809,6 +972,10 @@ def main(argv: list[str] | None = None) -> int:
         return args.func(args)
     except (UsageError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except Exception as exc:  # malformed data in a hand-edited log; never a traceback
+        print(f"error: unexpected {type(exc).__name__}: {exc}. rows.jsonl may hold a malformed row; "
+              "fix or remove it and run the command again", file=sys.stderr)
         return EXIT_USAGE
 
 

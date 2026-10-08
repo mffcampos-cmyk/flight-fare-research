@@ -8,7 +8,7 @@ books: the canary contract, per-source state, staleness and ladder order.
   source_ledger.py status [--max-age-days 7] [--json]   exit 0 fresh, 3 probe needed
   source_ledger.py record <id> <state> --evidence TEXT [--url U] [--results N] [--engine NAME]
   source_ledger.py record <new-id> <state> --evidence TEXT --add --name N --role R --family F [--url U]
-  source_ledger.py order [--json]
+  source_ledger.py order [--json] [--engine NAME]
 
 --engine names the browser that produced the state (for example
 claude-in-chrome, browser-act, headless-playwright): a block on one engine is
@@ -40,6 +40,15 @@ AVOID = ("blocked", "empty", "error")
 ROLE_RANK = {"discovery": 1, "exact": 2, "ota": 3, "airline": 4, "crosscheck": 5, "opportunistic": 6,
              "positioning": 7, "routes": 8}
 HISTORY_MAX = 5
+# Browser ladder rungs (references/browser-engines.md): lower is closer to the user's own browser.
+ENGINE_RUNG = {"claude-in-chrome": 1, "builtin-browser": 1, "cowork": 1, "browser-act-chrome": 1,
+               "browser-act": 2}
+
+
+def engine_rung(engine):
+    if not engine:
+        return None
+    return ENGINE_RUNG.get(engine, 3 if engine.startswith("headless") else None)
 
 CANARY = {"origin": "ZRH", "destination": "LIS", "lead_days": 30, "trip_days": 7,
           "adults": 1, "cabin": "economy", "currency": "CHF", "trip_type": "round-trip"}
@@ -283,21 +292,32 @@ def cmd_order(args, data):
     use += [dict(id=i, engine=s.get("engine"), **{k: s[k] for k in fields})
             for i, s in items if s.get("state") == "partial"]
     untested = [dict(id=i, name=s["name"], role=s["role"]) for i, s in items if not s.get("state")]
-    avoid = [dict(id=i, name=s["name"], state=s["state"], checked_at=s["checked_at"],
-                  engine=s.get("engine"), evidence=s.get("evidence"))
-             for i, s in items if s.get("state") in AVOID]
+    mine = engine_rung(args.engine)
+    avoid, reprobe = [], []
+    for i, s in items:
+        if s.get("state") not in AVOID:
+            continue
+        entry = dict(id=i, name=s["name"], state=s["state"], checked_at=s["checked_at"],
+                     engine=s.get("engine"), evidence=s.get("evidence"))
+        theirs = engine_rung(s.get("engine"))
+        (reprobe if mine and theirs and mine < theirs else avoid).append(entry)
     if args.json:
-        print(json.dumps({"use": use, "untested": untested, "avoid": avoid}, indent=2))
+        print(json.dumps({"use": use, "untested": untested, "reprobe": reprobe, "avoid": avoid}, indent=2))
         return 0
     print("USE (in order):")
     for n, s in enumerate(use, 1):
         print(f"  {n}. {s['id']:<22} {s['role']:<13} family={s['family']:<12} {s['state']:<8}"
               f" engine={s.get('engine') or '-'}")
     print("UNTESTED (one probe allowed if needed): " + (", ".join(u["id"] for u in untested) or "-"))
+    if reprobe:
+        print(f"RE-PROBE ALLOWED on {args.engine} (failed only on a lower rung): "
+              + ", ".join(s["id"] for s in reprobe))
     print("AVOID this run unless re-probed:")
     for s in avoid:
+        hint = ("  [lower-rung result: one probe allowed in the user's own browser]"
+                if (engine_rung(s.get("engine")) or 0) > 1 and not mine else "")
         print(f"  - {s['id']:<22} {s['state']:<8} {(s['checked_at'] or '')[:10]}  "
-              f"engine={s.get('engine') or '-'}  {s['evidence']}")
+              f"engine={s.get('engine') or '-'}  {s['evidence']}{hint}")
     return 0
 
 
@@ -314,6 +334,7 @@ def main(argv=None):
     r.add_argument("--add", action="store_true", help="register a source missing from the registry")
     r.add_argument("--name"); r.add_argument("--role", choices=sorted(ROLE_RANK)); r.add_argument("--family")
     o = sub.add_parser("order"); o.add_argument("--json", action="store_true")
+    o.add_argument("--engine", help="your engine: failures recorded only on a lower rung become re-probes")
     args = p.parse_args(argv)
     args.ledger = args.ledger or default_ledger()
     data = load(args.ledger) if args.cmd != "canary" else None
