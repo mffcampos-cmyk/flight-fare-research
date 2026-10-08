@@ -58,8 +58,28 @@ a persistent [browser-act](https://docs.browseract.com/) browser, then a
 headless one. It paces searches like a person. When a site challenges it, the
 user can clear the check in their own browser if they are watching; otherwise
 the source is recorded as blocked and the search moves on. It never solves
-CAPTCHAs, rotates proxies, changes fingerprints or imports sessions. See
-`skill/references/browser-engines.md`.
+CAPTCHAs, rotates proxies, changes fingerprints or imports anyone else's
+sessions. See `skill/references/browser-engines.md`.
+
+### Optional: BrowserAct (no login needed)
+
+[BrowserAct](https://github.com/browser-act/skills) adds a local browser CLI
+that can drive your own Chrome (`chrome-direct`) or a persistent Chromium
+(`chrome`). Both modes are free without an account.
+
+```bash
+# 1. the entry skill (Claude Code shown; other agents use their skills folder)
+git clone --depth 1 https://github.com/browser-act/skills /tmp/browser-act-skills
+mkdir -p ~/.claude/skills && cp -R /tmp/browser-act-skills/browser-act ~/.claude/skills/
+# 2. the CLI
+uv tool install browser-act-cli --python 3.12
+browser-act --version
+```
+
+The flight skill then runs `browser-act get-skills core` at the start of each
+session and asks before creating any browser. It does not use BrowserAct's
+login-only features (stealth browsers, `stealth-extract`, `solve-captcha`,
+`remote-assist`, proxies).
 
 ## Install
 

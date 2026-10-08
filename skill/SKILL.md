@@ -179,7 +179,9 @@ with `Incomplete: completeness not machine-checked`.
 ## Browsers and bot walls
 
 Prefer the user's own browser (Claude in Chrome, the desktop built-in browser,
-Cowork's browser), then a persistent browser-act browser, then a headless one.
+Cowork's browser, or BrowserAct's `chrome-direct`), then a persistent BrowserAct
+`chrome` browser, then a headless one. BrowserAct needs no login for these
+modes; setup is in `references/browser-engines.md`.
 One site at a time, deep links over refilled forms, human pauses between
 searches, cookies declined once and the session kept.
 

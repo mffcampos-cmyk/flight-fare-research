@@ -11,8 +11,8 @@ the pace, and says what to do when a site challenges you.
 | 1 | Claude in Chrome (the user's own Chrome) | `mcp__claude-in-chrome__*` tools; load the host's browser skill first | `claude-in-chrome` |
 | 1 | Claude desktop built-in browser | `mcp__Claude_Browser__*` or `mcp__remote-devices__Claude_Browser__*` tools | `builtin-browser` |
 | 1 | Cowork browser | Cowork's navigate / find / read_page / javascript tools | `cowork` |
-| 1 | browser-act attached to the user's running Chrome | browser-act's real-Chrome mode (see its own skill) | `browser-act-chrome` |
-| 2 | browser-act managed browser | `command -v browser-act`; one persistent named browser | `browser-act` |
+| 1 | BrowserAct `chrome-direct` (drives the user's running Chrome) | `command -v browser-act`; see "BrowserAct" below | `browser-act-chrome` |
+| 2 | BrowserAct `chrome` (its own Chromium, optionally with the user's Chrome profile imported) | `command -v browser-act`; one persistent named browser | `browser-act` |
 | 3 | Host headless browser | Hermes `browser_exec`, Playwright, other headless tools | `headless-<tool>` |
 
 Use the highest rung the host offers. Record the engine on every ledger probe
@@ -56,26 +56,51 @@ The only ways past a challenge are the user's own hands, an official API with
 configured credentials, or another source. The skill uses the browser exactly
 as the host configured it and leaves its anti-detection features off: no CAPTCHA
 solving, no proxy or TLS rotation, no stealth or fingerprint changes, no
-imported cookies or sessions, no private or reverse-engineered APIs. This holds
+cookies or sessions other than the user's own (imported only with their
+confirmation), no private or reverse-engineered APIs. This holds
 even when the user asks for "whatever it takes": the site's controls are the
 site's to waive, and an evaded block is not evidence anyone could book.
 
-## browser-act notes
+## BrowserAct (no login needed)
 
-- Load browser-act's own skill (or run its `get-skills` command) for current
-  command names; they change between versions. This file records only
-  fare-specific lessons.
-- Keep one persistent named browser and reuse it across runs, so consent and
-  cookies survive. Open your own uniquely named session on that browser; a
-  session is a handle, not a durable object, and may need reopening. Run
-  `state` after attaching and re-check form values before searching.
-- Never operate a session another conversation created.
-- If the CLI cannot see a browser that is clearly running, the CLI and the
-  browser are using different OS users or data directories. Run the CLI as the
-  user that owns the browser processes, with that user's `HOME` and display.
-- Parallel sessions on one browser share cookies, which is useful for side-by-
-  side cross-checks on different sites.
-- Close sessions you opened when the run ends.
+[BrowserAct](https://github.com/browser-act/skills) gives agents a local browser
+CLI. Its `chrome` and `chrome-direct` modes are free and need no account; the
+skill uses only those.
+
+**Install once, with the user's OK** (it downloads a package):
+
+1. Add BrowserAct's entry skill to the agent's skills folder: the `browser-act`
+   folder from `https://github.com/browser-act/skills/tree/main/browser-act`
+   (Claude Code: `~/.claude/skills/browser-act/`).
+2. Install the CLI: `uv tool install browser-act-cli --python 3.12`, then
+   `browser-act --version`. If the command is missing, add `uv tool dir` to `PATH`.
+
+**Every session:**
+
+1. Run `browser-act get-skills core --skill-version 2.0.2` and read all of it;
+   it lists the browsers, live sessions and current commands for the installed
+   version.
+2. Pick the browser by its description in `browser list`. With none suitable,
+   propose one and wait for the user's yes before `browser create` (BrowserAct
+   requires a separate confirmation for every browser it creates):
+   - `chrome-direct`: drives the user's running Chrome with their cookies and
+     extensions (rung 1). It occupies that Chrome while it runs, and the user
+     sees every page, so they can clear a check themselves.
+   - `chrome`: a separate Chromium (rung 2). Name it for the job, for example
+     `flight-research`, keep it across runs so consent choices persist, and open
+     it with `--headed` when a display exists: headless Chromium is the easiest
+     to flag.
+3. Open your own session: `browser-act --session <name> browser open <id> <url>`.
+   Work in the loop *state → act → `wait stable` → state*. Indices from `state`
+   are valid only until the page changes; never reuse old numbers, and never
+   operate a session you did not open.
+4. Read results with `get markdown` (or `eval` for a recipe's page code) and
+   add rows to `run_log.py` as you go.
+5. Close your sessions at the end: `browser-act session close <name>`.
+
+`get-skills` also describes `stealth-extract`, `solve-captcha`, `remote-assist`,
+stealth browsers and proxies. They need a BrowserAct login or a paid plan, and
+the skill does not use them; follow "When a site challenges you" instead.
 
 ## Running the recipe snippets
 
@@ -85,9 +110,12 @@ keyboard and text actions generically. Map them to the engine:
 | Recipe action | Claude in Chrome / built-in / Cowork | browser-act | Headless (CDP / Playwright) |
 |---|---|---|---|
 | Run in page | the JavaScript tool | `eval` | `Runtime.evaluate` / `page.evaluate` |
-| Type into the focused field | the type or form-input tool | `input --selector` | `Input.insertText` / `page.keyboard.type` |
-| Press a key with a real key code | the key-press tool | `keys` | `Input.dispatchKeyEvent` with `windowsVirtualKeyCode` |
-| List controls by role and name | read-page / find tools | `state` | `Accessibility.getFullAXTree` |
+| Type into a field | the type or form-input tool | `input <N> "text"` or `input --selector <css> --text "text"` | `Input.insertText` / `page.keyboard.type` |
+| Press a key with a real key code | the key-press tool | `keys "Enter"` | `Input.dispatchKeyEvent` with `windowsVirtualKeyCode` |
+| List controls by role and name | read-page / find tools | `state` (indexed `[N]` list) | `Accessibility.getFullAXTree` |
+| Click a control | the click tool | `click <N>` or `click --selector <css>` | `page.click` |
+| Read the page as text | read-page / get-page-text tools | `get markdown` | `page.innerText` |
+| Wait for results | wait / screenshot | `wait stable` | `page.waitForLoadState` |
 
 After any reflow or viewport change, take a fresh screenshot before a
 coordinate click, and prefer DOM-scoped lookups to coordinates.
