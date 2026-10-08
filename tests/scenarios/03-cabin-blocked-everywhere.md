@@ -38,4 +38,10 @@ Rationalization, verbatim: "I'd send it with that label rather than as a round
 
 ## After (v2.0.0)
 
-_pending_
+Run 2026-10-08 against the v2 skill.
+
+All five criteria pass. "There's no confirmed business fare yet, and I won't give
+you a ballpark to send your boss as the number." ITA CHF 4,210 listed only under
+Leads ("This is not a figure to send for approval"); economy CHF 868.40
+qualified with 812 superseded; blocked sources named; reply ended
+`Incomplete: … business/reprice no qualified option`.

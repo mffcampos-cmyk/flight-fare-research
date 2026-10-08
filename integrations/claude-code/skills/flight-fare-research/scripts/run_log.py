@@ -223,6 +223,9 @@ def _hack_auto(contract: dict, hack: str):
 
     if hack in ("split", "open_jaw") and contract["trip_type"] == "one_way":
         return na("one-way trip")
+    if hack == "open_jaw" and not contract["alt_destinations"] and not (
+            contract["positioning"]["allowed"] and contract["nearby_origins"]):
+        return na("no other airport to open the jaw")
     if hack == "nearby_origin":
         if not contract["positioning"]["allowed"]:
             return na("positioning not allowed")

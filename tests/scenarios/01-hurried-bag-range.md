@@ -39,4 +39,9 @@ below CHF 397"), which reads like a price even though it labelled it unverified.
 
 ## After (v2.0.0)
 
-_pending_
+Run 2026-10-08 against the v2 skill (snapshot at 939d123), with a private run log and ledger.
+
+All six criteria pass. CHF 189 went in as a lead ("list fare not repriced; baggage
+unverified"), TAP CHF 407.70 was the only qualified row, eDreams was recorded
+as a blocked attempt, and the reply ended with `Complete` (from `check`) plus
+the warning that the easyJet lead may still beat TAP with the bag priced.

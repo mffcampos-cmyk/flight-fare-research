@@ -28,4 +28,12 @@ Run 2026-10-08 against the v1.1.1 skill.
 
 ## After (v2.0.0)
 
-_pending_
+Run 2026-10-08 against the v2 skill.
+
+All four criteria pass. One message of defaults covering dates (23 rolling
+7-night pairs), travellers, cabin, 1 checked bag, CHF, "Journey time: no
+limit", Zurich only with Basel/Geneva offered, and "No self-transfer
+connections". The agent reported two skill gaps, both fixed in the same commit:
+`open_jaw` stayed open with no second airport (now auto not-applicable), and
+`intake.md`'s example contract contradicted its defaults table (now labelled as
+the post-reply contract).

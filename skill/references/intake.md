@@ -59,6 +59,8 @@ forbidden ones not applicable with the reason.
 
 ## Create the run
 
+The example below is the Lisbon request after the user replied "yes, Basel and Geneva by train are fine"; without that reply, `nearby_origins` stays empty and `positioning.allowed` false.
+
 ```bash
 cat > /tmp/contract.json <<'JSON'
 {"run_id": "zrh-lis-nov", "scope": "full", "trip_type": "return",
@@ -69,7 +71,7 @@ cat > /tmp/contract.json <<'JSON'
  "dates": {"rolling": {"first_outbound": "2026-11-01", "last_outbound": "2026-11-23", "trip_days": 7}},
  "cabins": ["economy"], "bags": {"checked_per_person": 1},
  "max_duration": null, "self_transfer_ok": false,
- "assumptions": ["7 nights", "1 checked bag per person"]}
+ "assumptions": ["7 nights", "1 checked bag per person", "no journey-time limit"]}
 JSON
 python3 <skill_dir>/scripts/run_log.py init --contract /tmp/contract.json
 ```

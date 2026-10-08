@@ -132,3 +132,12 @@ def test_runs_root_precedence(tmp_path, monkeypatch):
     monkeypatch.delenv("XDG_STATE_HOME")
     monkeypatch.setenv("HOME", str(tmp_path / "h"))
     assert run_log.runs_root() == str(tmp_path / "h" / ".local" / "state" / "flight-fare-research" / "runs")
+
+def test_open_jaw_needs_another_airport():
+    def auto(c):
+        return {x["id"]: x["auto"] for x in run_log.build_cells(c)}["economy/hack/open_jaw"]
+    assert auto(contract(scope="full")) == {"as": "na", "reason": "no other airport to open the jaw"}
+    assert auto(contract(scope="full", nearby_origins=["BBB"])) == \
+        {"as": "na", "reason": "no other airport to open the jaw"}
+    assert auto(contract(scope="full", alt_destinations=["YYY"])) is None
+    assert auto(contract(scope="full", nearby_origins=["BBB"], positioning=POS)) is None

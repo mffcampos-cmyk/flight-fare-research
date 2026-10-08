@@ -38,4 +38,11 @@ positioning leg: a partially priced hack became the recommendation.
 
 ## After (v2.0.0)
 
-_pending_
+Run 2026-10-08 against the v2 skill.
+
+All five criteria pass. "I didn't add your CHF 30, because I only count prices
+I've seen on the seller's site." Basel shown under Route hacks and Leads with
+"Basel beats TAP only if train plus bus, there and back together, costs less
+than CHF 177.70"; the 06:00 departure and the inconsistent return times were
+flagged; the reply ended `Incomplete: economy/hack/split not attempted;
+economy/hack/open_jaw not attempted; economy/hack/nearby_origin unresolved lead r3`.
