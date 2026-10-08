@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.0]
+
+- **Key rule enforced by a script.** New `skill/scripts/run_log.py` (standard library only) stores the search contract, saves every observation as it is read, computes each row's status (`qualified`, `lead` with reasons, `rejected`, `superseded`, `attempt`), ranks qualified options by all-in total with lower-bound pruning, and `check` exits 0 only when every requested comparison is finished (4 otherwise).
+- **Intake first.** One message asks for missing dates or trip length, airports, travellers, cabins, bags, currency, journey-time limit and positioning/self-transfer tolerance, each with a default; unattended runs record defaults as assumptions.
+- **Browser ladder and challenge policy.** The user's own browser first (Claude in Chrome, built-in browser, Cowork), then a persistent browser-act browser, then headless; human pacing; challenges handed to a watching user or recorded as blocked. No CAPTCHA solving, proxy/TLS rotation, fingerprint changes or session import.
+- **Restructured skill.** `SKILL.md` rewritten (under 2,000 words, enforced) around six phases; new references `intake.md`, `browser-engines.md` (replaces `browser-act-support.md`), `qualification.md`, `route-hacks.md` (absorbs `lead-discovery.md`); recipes made host-neutral.
+- **Source ledger.** `--engine` recorded per state, `--add` for ad-hoc sources, `positioning` and `routes` roles, 23 untested expansion candidates (OTAs, airline sites, stopover programmes, rail sellers, route maps); naive timestamps no longer crash it.
+- **Cowork** now gets the full skill as `dist/flight-fare-research-cowork.zip`, built by `package.py` and uploaded by CI; the hand-maintained card is gone.
+- **Validation:** version agreement, script `--help` checks, Cowork zip parity, `SKILL.md` word budget, bytecode never packaged.
+- **Tests:** the test-only `tests/rules.py` is replaced by tests of the shipped `run_log.py`; pressure scenarios with recorded baseline and after results in `tests/scenarios/`.
+- Removed: `integrations/cowork/SKILL.md`, `docs/feedback-review.md`, `docs/cowork-v1.8-review.md`, `docs/source-support-matrix.md` (dated rows moved to `historical-observations.md`).
+
 ## [1.1.1]
 
 - FlightList recipe: easyAutocomplete only reacts to keyup events with a real `keyCode`. Synthetic key events without one look like a dead autocomplete.

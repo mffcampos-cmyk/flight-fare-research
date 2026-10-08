@@ -2,76 +2,92 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An Agent Skill for evidence-based live airfare and route research. It collects exact-date fare observations, applies explicit duration and baggage gates, and records source provenance and blocked-source outcomes.
+An agent skill for finding the best flight you could actually book, not just
+the lowest advertised fare. It compares exact dates, the cabins you asked for,
+baggage, journey time and route hacks, and keeps evidence for every price it
+recommends.
 
-## Supported hosts
+It is an agent workflow with browser recipes, not a flight-search engine. The
+agent does the searching in a browser; two small Python scripts keep the books.
+It never books flights or handles payments.
 
-- [Hermes](https://hermes-agent.nousresearch.com/)
-- OpenAI Codex
-- Claude Code
+## The key rule
 
-- **Cowork** — a self-contained variant optimized for the Cowork built-in browser lives in `integrations/cowork/SKILL.md` (no CLI/CDP dependencies, word-bounded, uses Cowork's native actions and hosted tools). This canonical `skill/` remains modular and host-agnostic for the environments above.
+An advertised fare or a partly priced route hack is a **lead**, not a
+recommendation. A price becomes **qualified** only when both directions are
+selected, each direction is within the journey-time limit, baggage is resolved
+for the bags requested, every all-in part (positioning, hotel, transfers) is
+priced, and the seller has repriced it. Anything unresolved is labelled next to
+its price, and the search is never called complete while requested comparisons
+are unfinished.
 
-## Installation
+## How it works
 
-This repository ships the canonical skill (`skill/`) plus per-host packages. Edit `skill/` and regenerate the packaged copies with `python3 scripts/package.py`; validate with `python3 scripts/validate.py`.
+1. **Intake.** One message asks for anything missing, each item with a default:
+   dates or trip length, airports, travellers, cabins, bags, currency, journey-
+   time limit, and how much positioning or self-transfer risk is acceptable.
+2. **Scope.** A quick search for simple fixed-date trips; a full search for
+   flexible dates, long haul, several cabins or route hacks.
+3. **Collect.** Connectors or browser sources, search settings verified on the
+   page, every observation saved as it is read, coverage checked by the script.
+4. **Route hacks.** Split one-ways, open-jaw/multi-city, nearby departure
+   airports, alternative arrival airports and stopovers, priced all-in with
+   positioning, bags and unavoidable hotel or transfer costs.
+5. **Qualify.** Both directions, the duration cap per direction, mixed-cabin
+   labels kept, baggage verified per ticket, repriced with the airline or seller.
+6. **Cross-check and report.** Independent source families, ranking by
+   qualified all-in price and practicality, local times, risks, retrieval
+   timestamps and booking links, and a final `Complete` or `Incomplete:` line.
 
-### Hermes
+## The scripts (Python 3, standard library only)
 
-```bash
-integrations/hermes/install.sh
-```
+- `skill/scripts/run_log.py`: one run's contract, observation rows, computed
+  lead/qualified status, ranking with pruning, coverage, and `check` (exit 0
+  when complete, 4 while comparisons are open). Runs are stored under
+  `$FFR_RUNS`, else `$XDG_STATE_HOME/flight-fare-research/runs`, else
+  `~/.local/state/flight-fare-research/runs`.
+- `skill/scripts/source_ledger.py`: which sources work on which browser engine,
+  from a fixed canary search. Stored under `$FFR_LEDGER` or the same state
+  directory. Never commit either file: both hold raw local evidence.
 
-### Codex
+## Browsers and bot walls
 
-From the repository root, start Codex in the integration directory:
+The skill prefers the browser least likely to be blocked: the user's own
+(Claude in Chrome, the Claude desktop built-in browser, Cowork's browser), then
+a persistent [browser-act](https://docs.browseract.com/) browser, then a
+headless one. It paces searches like a person. When a site challenges it, the
+user can clear the check in their own browser if they are watching; otherwise
+the source is recorded as blocked and the search moves on. It never solves
+CAPTCHAs, rotates proxies, changes fingerprints or imports sessions. See
+`skill/references/browser-engines.md`.
 
-```bash
-cd integrations/codex
-codex
-```
+## Install
 
-This makes `.agents/skills/flight-fare-research/` and `AGENTS.md` local to the
-Codex workspace. Alternatively, copy the skill directory into your project's
-`.agents/skills/` after checking for an existing installation.
+The canonical skill is `skill/`. Host packages are generated from it with
+`python3 scripts/package.py` and checked with `python3 scripts/validate.py --strict`.
 
-### Claude Code
-
-```bash
-claude --plugin-dir integrations/claude-code
-```
-
-### Cowork (single-file skill card)
-
-Use only [`integrations/cowork/SKILL.md`](integrations/cowork/SKILL.md) when adding
-or replacing the Cowork skill card. Do not inline the canonical references or
-use the Claude Code plugin as a Cowork card. Keep the frontmatter with the body.
-The variant uses Cowork's available native browser tools; it requires no CLI.
-The standalone card is general-purpose: provide origins, currency, nearby-airport
-permissions and duration limits for each request. No personal profile is bundled.
-Browser regression findings inform the recipes; they are not fare guarantees.
-Cards may omit version/license metadata; the changelog records the revision.
-The standalone body budget is now 1,500–2,600 words to retain working recipes.
-
-## Requirements
-
-The modular Hermes/Codex/Claude Code package **prefers `browser-act`** for rendered, interactive flight searches; when the CLI is not installed it falls back to the host's own browser tool under the same consent, verification and one-attempt rules. The standalone Cowork card uses Cowork's native browser. See `skill/references/browser-act-support.md` for browser-act environment setup and session handling.
-
-The optional source health check (`skill/scripts/source_ledger.py`, Python standard library only) keeps a local status ledger outside the skill folder (`$FFR_LEDGER`, else `$XDG_STATE_HOME` or `~/.local/state/flight-fare-research/`). The ledger holds raw probe evidence and must not be committed. See `skill/references/source-health.md`.
+- **Claude Code:** `claude --plugin-dir integrations/claude-code`
+- **Codex:** `cd integrations/codex && codex` (or copy
+  `integrations/codex/.agents/skills/flight-fare-research/` into your project's
+  `.agents/skills/`)
+- **Hermes:** `integrations/hermes/install.sh`
+- **Cowork:** run `python3 scripts/package.py` and upload
+  `dist/flight-fare-research-cowork.zip` (also published as a CI artifact). See
+  `integrations/cowork/README.md`.
 
 ## Capability boundary
 
-This project performs research only. It does not book flights, handle payments, complete checkout, store credentials, or guarantee observed prices. See the [Safety and provenance guide](docs/safety-and-provenance.md) for the full rules, and the [Source support matrix](docs/source-support-matrix.md) for dated per-source status.
+Research only: no booking, checkout, payment, account creation or stored
+credentials, and no guarantee that an observed price still holds. Details in
+[Safety and provenance](docs/safety-and-provenance.md).
 
 ## Documentation
 
-- [Safety and provenance](docs/safety-and-provenance.md) — anti-evasion rules, observation-not-guarantee, baggage/quote states, source independence.
-- [Source support matrix](docs/source-support-matrix.md) — dated status of working / partial / blocked / untested sources.
-- [Manual release checklist](docs/manual-release-checklist.md) — the pre-release browser-act run that gates tagging.
-- [Feedback review](docs/feedback-review.md) — disposition of the 24-item 2026-09-23 review (quick/full workflows, connector discovery, cookie/bag/currency gates, provenance of user-observed recipes).
-
-- [Cowork integration review](docs/cowork-v1.8-review.md) — supplied card validation,
-  latest browser fixes and validation scope.
+- [Safety and provenance](docs/safety-and-provenance.md): evidence rules, statuses, browser and challenge policy.
+- [Release checklist](docs/manual-release-checklist.md)
+- [Dated source observations](skill/references/historical-observations.md)
+- [Pressure scenarios](tests/scenarios/README.md): manual behaviour tests for the skill.
+- [2.0 design](docs/superpowers/specs/2026-10-08-flight-fare-research-v2-design.md)
 
 ## License
 

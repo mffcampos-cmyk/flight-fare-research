@@ -2,112 +2,91 @@
 
 This project performs **research only**. It does not book flights, handle
 payments, complete checkout, store credentials, or guarantee observed prices.
-This document is the source of truth for the capability boundary and the
-evidentiary rules; the skill (`skill/SKILL.md`) restates and enforces them.
+This document states the boundary and the evidence rules; the skill
+(`skill/SKILL.md`) and `run_log.py` enforce them.
 
-## Anti-evasion stance
+## Browsers and challenges
 
-- **No CAPTCHA solving, proxy rotation, stealth fingerprints, or TLS
-  rotation.** When a source shows an explicit bot page, CAPTCHA, Cloudflare
-  block, HTTP 403, or provider guard, do not install or configure
-  anti-detection tooling to recover a fare.
-- **One recorded attempt per blocked source per run.** Record the failure
-  mode and move on. Repeated retries against a blocked source waste time and
-  do not improve evidentiary quality. Use an official API, an airline-direct
-  engine, an alternate aggregator, or a user-visible manual path instead.
-- **Consent is normal interaction, not evasion.** Google properties present a
-  consent page before search; accept/store the consent choice normally (single
-  browser, shared cookies). Interacting normally with a consent prompt is
-  legitimate use, not circumvention.
-- **Do not unofficially reverse-engineer a site's private API** merely to
-  inflate source count or recover a fare that is otherwise guarded. Wrapper or
-  scraping endpoints require provenance, terms, and freshness checks before
-  use.
+- **Engine ladder.** Prefer the user's own browser (Claude in Chrome, the Claude
+  desktop built-in browser, Cowork's browser), then a persistent browser-act
+  browser, then a headless browser. Record the engine with every source state.
+- **Pace like a person.** One site at a time, deep links over refilled forms,
+  pauses between searches, optional cookies declined once per site and the
+  session kept.
+- **Challenges.** On a CAPTCHA, press-and-hold check, "unusual traffic" page,
+  bot page or HTTP 403/429, stop that site for the run. A user watching their
+  own browser may complete the check themselves; otherwise record the source as
+  blocked (with the engine) and move on.
+- **Never:** automated CAPTCHA solving, proxy or TLS rotation, stealth or
+  fingerprint changes, imported cookies or sessions, or private and
+  reverse-engineered APIs, even when the user asks. A site's controls are the
+  site's to waive, and a fare reached by evading them is not evidence anyone
+  could book.
+- **Consent banners** are normal interaction: decline optional cookies.
 
-## Prices are observations, not guarantees
+## Lead or qualified
 
-- A search-result price is an **observation** at a retrieval time, not a
-  guaranteed fare and not a booking.
-- A result card or list-page amount can change at checkout (fare families,
-  mandatory fees, price repricing). When a completed page says the price
-  changed, replace the list amount with the completed provider total and keep
-  the old amount only as a clearly labelled stale observation.
-- Do not rank an aggregator teaser above an airline-direct fare until the
-  exact itinerary survives checkout repricing.
+`run_log.py` computes each observation's status; the agent never asserts it.
 
-## No booking, payment, or account secrets
+| Status | Meaning |
+|---|---|
+| `qualified` | Both directions selected, each within the journey-time limit, baggage resolved for the requested bags, every all-in part priced, repriced on the seller's page, currency comparable |
+| `lead` | Passes the hard gates but has open items, listed as reasons (for example `baggage unverified`, `positioning unpriced`, `list fare not repriced`) |
+| `rejected` | Fails a hard gate: over the duration cap, a forbidden self-transfer, wrong cabin, dates or airports, positioning not allowed |
+| `superseded` | Replaced by a later reprice; kept as a stale observation |
+| `attempt` | A blocked, empty or broken page; no price |
 
-- Do **not** complete a booking or checkout, enter a card number, create an
-  account, or accept API secrets. Never render a trip bookable from this tool.
-- Never ask for, accept, or print API credentials in chat. Use the configured
-  secret store or environment variables, and check only *whether* a credential
-  is configured — never its value.
-- **No secret storage.** This repo must not accumulate saved passwords,
-  session tokens, booking tokens, or checkout handles.
-- On a release boundary, confirm no secret, session, or booking tokens are
-  present in the working tree before tagging (see
-  `docs/manual-release-checklist.md`).
+Only qualified options are recommended. Leads appear under "Leads (not
+verified)" with their reasons. The run is complete only when `run_log.py check`
+exits 0; otherwise the report ends with `Incomplete:` and the open items.
 
-## Baggage states
+Quote states on each ticket: `list` (a search-result price), `completed` (the
+seller's completed price page on the exact itinerary), `repriced` (a completed
+price that replaced an earlier amount).
 
-Classify checked-baggage status on the completed itinerary as exactly one of:
+## Baggage
 
-- **included** — the completed itinerary or fare family explicitly includes at
-  least one checked piece;
-- **fee required** — the page explicitly says the first checked bag costs
-  extra;
-- **unverified** — no itinerary-level allowance is exposed.
+Per ticket, exactly one of:
 
-Never label a fare "bag included" from airline norms, cabin expectations, or a
-generic policy page. A result list that says optional bag fees apply does not
-prove inclusion; the completed itinerary line and booking-provider total are
-the evidence.
+- **included:** the completed itinerary or fare family states at least one
+  checked piece;
+- **fee required:** the page states the first checked bag costs extra (with the
+  fee recorded);
+- **unverified:** no itinerary-level allowance, or a range starting at zero
+  (`CHF 0–104`).
 
-## Quote states
+Airline norms, cabin expectations and generic policy pages never make a bag
+"included". Each separate ticket needs its own bag line.
 
-Distinguish the evidence grade of every recorded price:
+## No booking, payment or secrets
 
-- **list** — a headline list fare from a search-result card (no-bag base fare
-  common; not completed);
-- **completed** — a completed-itinerary provider or airline quote fetched on
-  exact dates,
-- **repriced** — the current completed provider amount after a booking page
-  reprices the fare from an earlier list/repriced value. The pre-reprice amount
-  is retained only as a clearly labelled stale observation. In the stored
-  evidence, the row's price is the current value and any previous amount is the
-  stale one.
-
-A "completed" or "repriced" label requires the exact route, dates, travelers,
-cabin, and currency to be reproduced in the completed page.
+- Stop before passenger details. Never enter card numbers, create accounts or
+  complete checkout.
+- Never ask for, accept or print credentials in chat; check only whether one is
+  configured in the environment or secret store.
+- The repository must not hold passwords, session tokens, booking tokens or
+  checkout handles; CI scans for them.
 
 ## Source independence
 
-At least two independent live **source families** are required before a fare
-is called corroborated. Two frontends backed by the same inventory or a
-redirect chain are not fully independent — disclose the relationship. Wrappers
-that re-aggregate another source (e.g. FlightsFinder re-aggregating Google
-Flights / KAYAK / Skyscanner / Momondo, SerpAPI wrapping Google Flights) never
-count as a separate source family.
+At least two source families are attempted per cabin. Frontends that share
+inventory or a redirect chain are one family (FlightList and Kiwi; Opodo and
+eDreams; Momondo and KAYAK; any Google Flights wrapper such as SerpAPI or
+FlightsFinder). Before calling a price corroborated, check: both sources ran the
+exact search; they use different backends; both showed populated itineraries;
+baggage is verified, not inferred; at least one reached a completed seller
+price. If any answer is no, say so and lower confidence.
 
-Apply the source-independence test (from `skill/references/source-ladder.md`):
+## Citations
 
-1. Did both sources execute the exact route, dates, passengers, cabin, and
-   currency?
-2. Do they rely on different inventory/search backends?
-3. Did both expose a populated itinerary rather than an indexed teaser?
-4. Is baggage independently verified or still inferred?
-5. Did at least one source reach a completed provider or airline fare?
-
-If any answer is no, state the limitation and lower confidence. When only one
-exact-date source remains, say so plainly and downgrade confidence rather than
-implying corroboration. Cite only pages actually retrieved, following
-`grounded-citations`; indexed deal pages are discovery leads, never
-exact-date evidence.
+Cite only pages actually retrieved: source name, URL (or connector query),
+retrieval timestamp with timezone, and the exact claim supported. Keep current
+observations, historical reports, policy pages and unvisited links apart. A
+blocked page or an indexed deal snippet is never fare evidence.
 
 ## See also
 
-- `docs/source-support-matrix.md` — current dated support status per source.
-- `docs/manual-release-checklist.md` — pre-release confirmation that the
-  boundary holds and the tree is clean.
-- `skill/references/source-ladder.md` — canonical routing, browser recipes, and
-  the source-independence test.
+- `docs/manual-release-checklist.md`
+- `skill/references/browser-engines.md`, `skill/references/qualification.md`,
+  `skill/references/source-ladder.md`
+- `skill/references/historical-observations.md` for dated source status

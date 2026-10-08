@@ -1,7 +1,7 @@
 ---
 name: flight-fare-research
 description: "Use when the user wants flight prices found, compared or verified: cheapest or best flights, fixed or flexible dates, cabin comparisons, checked-bag costs, nearby-airport, split-ticket, open-jaw or stopover route hacks, or flights around a fixed event. Research only; never books."
-version: 1.1.1
+version: 2.0.0
 author: hermes-curator
 license: MIT
 platforms: [linux, macos, windows]
