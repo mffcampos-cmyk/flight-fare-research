@@ -1,7 +1,7 @@
 ---
 name: flight-fare-research
 description: "Use when the user wants flight prices found, compared or verified: cheapest or best flights, fixed or flexible dates, cabin comparisons, checked-bag costs, nearby-airport, split-ticket, open-jaw or stopover route hacks, or flights around a fixed event. Research only; never books."
-version: 2.0.0
+version: 2.1.0
 author: hermes-curator
 license: MIT
 platforms: [linux, macos, windows]
@@ -23,6 +23,14 @@ You do the searching in a browser. Two scripts keep the books:
   observation row, each row's computed status, and whether the run is complete.
 - `python3 <skill_dir>/scripts/source_ledger.py`: which sources work, on which
   browser engine.
+
+Two more save time on the two biggest sources:
+
+- `scripts/gflights.py`: exact Google Flights search URLs for any cabin,
+  one-way, multi-city or several airports; a page parser; and an unattended
+  sweep through a BrowserAct session.
+- `scripts/flightlist.py`: one FlightList date-range search turned into rows
+  for every date pair it covers.
 
 Research only: stop before passenger details, and never book, pay, create
 accounts or handle credentials.
@@ -99,8 +107,19 @@ scope to the user.
    and currency. A loading shell, teaser, cached monthly minimum or calendar
    heatmap is not a result.
 5. **Save as you go.** Add each populated page (or blocked, empty or broken
-   attempt) with `run_log.py add` as soon as you have read it. Row fields are
-   in `references/qualification.md`.
+   attempt) with `run_log.py add` as soon as you have read it; it takes one
+   row or a JSON array. Row fields are in `references/qualification.md`.
+
+**Fast path for a flexible window.** Discover first, confirm second:
+
+1. One FlightList search over the whole departure and return ranges, recorded
+   with `flightlist.py rows` (`references/flightlist-browser.md`), shows the
+   cheapest pairs with both directions in under a minute.
+2. Confirm only the cheapest few pairs per cabin on Google with
+   `gflights.py sweep`, or by hand from `gflights.py url`
+   (`references/google-flights-browser.md`). Pairs nothing covered still need
+   a search before `coverage` closes them.
+3. Reprice the shortlist in a second session while Google runs in the first.
 
 For a flexible fixed-length trip, `init` expands rolling matched pairs (5→15,
 6→16, …); separate outbound and return ranges need the user's explicit yes to
@@ -132,6 +151,8 @@ exactly as shown (`Economy + Premium Economy`); record baggage per ticket;
 compare the bag-inclusive fare family with base fare plus bag fee; reprice on
 the airline's or seller's page (stop before passenger details); price every
 remaining all-in part. A reprice is a new row that `supersedes` the list row.
+The sellers that show bags and a total before passenger details are listed in
+`references/qualification.md`.
 
 Done when `rank` shows a qualified best option in every requested cabin, or
 you have closed that cabin's `reprice` comparison with
@@ -182,8 +203,10 @@ Prefer the user's own browser (Claude in Chrome, the desktop built-in browser,
 Cowork's browser, or BrowserAct's `chrome-direct`), then a persistent BrowserAct
 `chrome` browser, then a headless one. BrowserAct needs no login for these
 modes; setup is in `references/browser-engines.md`.
-One site at a time, deep links over refilled forms, human pauses between
-searches, cookies declined once and the session kept.
+One search at a time on each site with human pauses between searches; different
+sites in parallel sessions (or subagents); deep links over refilled forms;
+cookies declined once and the session kept. Every Google search spends a
+limited daily allowance, so search fewer pairs rather than faster.
 
 On a challenge (CAPTCHA, press-and-hold, "unusual traffic", bot page,
 403/429), stop that site for the run. If the user is watching their own

@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.1.0]
+
+Everything here comes from a live test run (ZRH–GIG, 25 date pairs, four cabins, every route hack, BrowserAct `chrome`, 2026-10-08/09).
+
+- **Speed.**
+  - New `scripts/flightlist.py`: one FlightList date-range search (200 itineraries across 15 of 25 pairs in 23 s) becomes rows for every pair it covers, both directions included, and it lists the pairs it did not cover.
+  - New `scripts/gflights.py`: exact Google Flights URLs for every cabin, one-way, multi-city and several airports at once (the `?q=` link failed for premium and first), a results-page parser, and an unattended BrowserAct sweep. The sweep waits for the first priced card instead of a fixed delay, checks that the page repeats the cabin and dates, and stops at a challenge.
+  - SKILL.md has a fast path: discover with FlightList, confirm the cheapest pairs on Google, reprice in a parallel session. Different sites now run in parallel sessions or subagents; one search at a time per site remains.
+- **run_log.py.**
+  - `add` takes a JSON array or JSON Lines, all or nothing.
+  - `rank` shows dates, legs, sellers and booking links, and `--top N` limits the leads shown.
+  - `check` groups "may beat best qualified" warnings into one line per cabin (the test run produced 126 lines).
+  - Seller wording such as TAP's `Mixed Cabin` is flagged as a mixed cabin.
+- **Recipes.**
+  - Google Flights: always-present "Loading results" text; section headings; daily search allowance (HTTP 429 → `google.com/sorry` after about 90 searches in 24 h); booking page hidden by location.
+  - FlightList: range search, extraction snippet, and the Kiwi fare page as a qualification path. A FlightList "with bag" price matched neither Kiwi fare family.
+  - eDreams: German labels and the checkout summary.
+  - ITA Matrix: exact cabin labels and currency.
+  - TAP: long-haul fare panels, the "from" price below the cheapest family, a stopover kept in browser storage, the Portugal Stopover tool.
+  - Air France and KLM: silent 403, detected through the network log.
+  - SWISS and GOL findings.
+- **Route hacks.**
+  - How to record positioning flights (as tickets) versus rail (a component).
+  - Same-day self-transfer timing against the duration cap.
+  - Stopover legs and Google multi-city open jaws.
+  - New table of sellers that show bags and the total before passenger details (`qualification.md`).
+- **Dated observations** for the run in `historical-observations.md`.
+
 ## [2.0.0]
 
 - **Key rule enforced by a script.** New `skill/scripts/run_log.py` (standard library only) stores the search contract, saves every observation as it is read, computes each row's status (`qualified`, `lead` with reasons, `rejected`, `superseded`, `attempt`), ranks qualified options by all-in total with lower-bound pruning, and `check` exits 0 only when every requested comparison is finished (4 otherwise).

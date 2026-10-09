@@ -23,19 +23,27 @@ rung 2 or 3 may get one probe on rung 1 when rung 1 is available.
 Install nothing mid-search to change engines. If no browser exists at all, see
 the fallback in `source-health.md`.
 
-## Pace like a person
+## Pace like a person, work in parallel
 
-- One site at a time per session, one tab per site.
-- Prefer documented deep links over refilling a form; fill a form once, then
-  change one field per search.
-- Let each page settle and read it before the next action; leave about 10–20
-  seconds between searches on the same site.
-- Decline optional cookies once per site and keep the session, so consent is
-  not asked again.
-- Spread large batches (many date pairs or cabins) across the source families
-  the ledger marks `ok`, rather than running them all on one site.
-- Read results with one page-text read (for example `document.querySelector('main').innerText`)
-  instead of many screenshots.
+- One search at a time on each site, with about 10–20 seconds between searches
+  there. On Google Flights, 12 seconds between searches ran 80+ searches without
+  a challenge (2026-10-08); the next day, after about 90 searches in 24 hours,
+  Google answered 429 and `google.com/sorry`. Fewer searches beat faster ones:
+  discover with one FlightList range search, confirm the cheapest pairs only.
+- **Different sites in parallel.** Run each site in its own session or tab at
+  the same time: Google sweeping in one, TAP, eDreams, Kiwi or ITA Matrix in
+  another. This adds no load to any one site; in the ZRH–GIG run, eDreams,
+  FlightList, ITA Matrix and TAP were probed and repriced in a second tab while
+  the 50-search Google sweep ran. With BrowserAct, open a second session on the same browser
+  (`browser-act --session ffr-aux browser open <id> <url>`); it gets its own tab.
+  When the host has subagents, give each one its own session and source family.
+- Prefer documented deep links over refilling a form (`gflights.py url`, TAP's
+  deep link); fill a form once, then change one field per search.
+- Wait for the page's own ready signal (a priced card, a result count), not a
+  fixed delay; read results with one page-text read (`get markdown`, or
+  `document.querySelector('main').innerText`) instead of screenshots.
+- Decline optional cookies once per site and keep the session.
+- Spread large batches across the source families the ledger marks `ok`.
 
 ## When a site challenges you
 
@@ -95,8 +103,12 @@ skill uses only those.
    are valid only until the page changes; never reuse old numbers, and never
    operate a session you did not open.
 4. Read results with `get markdown` (or `eval` for a recipe's page code) and
-   add rows to `run_log.py` as you go.
-5. Close your sessions at the end: `browser-act session close <name>`.
+   add rows to `run_log.py` as you go. `scripts/gflights.py sweep --session <name>`
+   drives a whole Google Flights batch through your session.
+5. A site can block silently: the page stays on a spinner while its own search
+   requests fail. `browser-act --session <name> network requests --status 403`
+   (or 429) shows them; that is a block (record it), not a slow page.
+6. Close your sessions at the end: `browser-act session close <name>`.
 
 `get-skills` also describes `stealth-extract`, `solve-captcha`, `remote-assist`,
 stealth browsers and proxies. They need a BrowserAct login or a paid plan, and

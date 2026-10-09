@@ -1,7 +1,7 @@
 {
   "name": "flight-fare-research",
   "description": "Evidence-qualified airfare research: intake, exact-date collection, route hacks, lead vs qualified gates (research only, never books).",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": {
     "name": "Flight Fare Research contributors"
   },

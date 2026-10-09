@@ -25,7 +25,7 @@ python3 -m venv .venv
 ```
 
 `validate.py` checks copy parity, internal references, the `SKILL.md` word
-budget (2,000), version agreement, that both scripts run, and the Cowork zip.
+budget (2,000), version agreement, that every bundled script answers `--help`, and the Cowork zip.
 The scripts and validator use only the Python standard library.
 
 ## Changing skill behaviour

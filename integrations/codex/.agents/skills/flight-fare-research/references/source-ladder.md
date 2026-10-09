@@ -48,7 +48,7 @@ Do not rank an OTA teaser above airline-direct unless the exact itinerary surviv
 
 ## Route discovery (no fares)
 
-**FlightConnections** (`https://www.flightconnections.com/flights-from-<city>-<iata>`, ledger role `routes`) lists every non-stop destination and airline from an airport. Use it to choose nearby-airport and open-jaw candidates (which airlines fly non-stop from BSL or GVA to the destination) before pricing them elsewhere. It never prices a fare. Worked headless on 2026-10-08.
+**FlightConnections** (`https://www.flightconnections.com/flights-from-<city>-<iata>`, ledger role `routes`) lists every non-stop destination and airline from an airport. Use it to choose nearby-airport and open-jaw candidates (which airlines fly non-stop from BSL or GVA to the destination) before pricing them elsewhere. It never prices a fare. Worked headless on 2026-10-08. The arrival-side page (`/flights-to-<city>-<iata>`) lists every airport and airline with a non-stop to the destination; on 2026-10-08 a direct fetch returned an empty 202, while the text reader (`curl -s "https://r.jina.ai/<URL>"`) returned the full list.
 
 ## Partially usable sources (pragmatic tier)
 

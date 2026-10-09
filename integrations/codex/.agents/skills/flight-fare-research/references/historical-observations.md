@@ -94,3 +94,19 @@ challenged: a block here says nothing about the user's own browser.
 Takeaways: airline and rail sites guard headless sessions hardest, so price
 them in the user's own browser (rung 1). Kiwi direct and Booking.com load
 headless but returned no fares; try them on rung 1 before relying on them.
+
+## Live test run (2026-10-08/09, BrowserAct `chrome`, ZRH–GIG, 1 adult, 1 bag, CHF)
+
+Dated observations from one real run; reprice everything before relying on it.
+
+| Source | Result |
+|---|---|
+| Google Flights | 50 exact searches (25 pairs × economy, business) plus ~30 hack, premium and first searches at 12 s pacing without a challenge. `?q=` links opened the home page for premium and first; `tfs` URLs (`gflights.py url`) worked for every cabin, one-way, multi-city and five departure airports at once. Next day, after ~90 searches in 24 h, the Date grid request got HTTP 429 → `google.com/sorry`. Booking page: "Booking isn't supported yet in your location", bag line still shown. |
+| FlightList | Exact dates and a whole 5 × 5 window in one search (200 cards, 15 pairs, 23 s). Price "with 1 checked bag" (KLM, CHF 1,750.91) matched neither Kiwi family. |
+| Kiwi.com | Fare-selection page via FlightList `Book Flight`: KLM Light 1,555.26 / Standard (23 kg) 1,923.08 / Flex 2,131.25, before passenger details. Hand-built results URL redirected home. |
+| eDreams (edreams.ch) | Form flow and checkout summary worked; Economy Light without bag; bag fee only after the passenger step. |
+| ITA Matrix | Form, CHF and cabin filters worked; cheapest economy for 21 Dec / 11 Jan CHF 1,547.50 (LATAM/Iberia via MAD). |
+| TAP | Deep link worked for long haul; qualified economy CHF 1,961.95 and 2,011.95, business 4,363.00, Economy Prime ("Mixed Cabin") 2,445.85; Portugal Stopover CHF 2,744.75. Kept a stopover in browser storage across searches. |
+| Air France, KLM | Deep link prefilled the form; search API returned 403 silently. |
+| SWISS | Bot interstitial stayed: blocked. |
+| GOL | No flights offered from Lisbon on voegol.com.br; GOL/Wamos LIS–GIG sold via OTAs without a checked bag. |

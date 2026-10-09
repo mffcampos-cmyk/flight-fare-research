@@ -58,6 +58,42 @@ qualified option until the part is priced on its seller's site.
 - Hidden-city or throwaway tickets are not bag-compatible: checked bags go to
   the ticketed destination. Leave them out when bags are checked.
 
+## Recording a hack row
+
+- **Rail or bus positioning** is an amount: `components.positioning` (both
+  ways), `null` until priced on the operator's site.
+- **A positioning flight is a ticket**: add it to `tickets` with its own price,
+  quote state and bag line (a separate ticket's bag allowance never covers
+  another). Keep `components.positioning: null` only for a part still unpriced,
+  such as the return positioning flight.
+- **Same-day self-transfer** (hub-first: fly ZRH→LIS, then LIS→GIG on another
+  ticket): record each direction from the home airport to the destination with
+  the whole elapsed time and `self_transfer: true`, so the duration cap applies
+  to the journey the traveller actually makes. Example: TAP ZRH 18:00 → LIS
+  20:00, then GOL LIS 23:35 → GIG 06:35 is 16h35 door to door; the earlier TAP
+  13:30 would have given more buffer but 21h05, over a 20-hour cap. With a
+  previous-day positioning flight and a hotel (`positioning.overnight_ok`), the
+  long-haul journey is the direction and the night goes in `components.hotel`.
+- **Stopover**: one `out` (or `ret`) entry per flown journey (ZRH→LIS, then
+  LIS→GIG three days later), each with its own duration; the stay is not
+  journey time. Hotel nights go in `components.hotel`.
+- **Open jaw from a Google multi-city search** shows only the first leg; the
+  row stays `return not selected` until the later legs are selected. A
+  domestic hop that closes the jaw is its own ticket.
+
+## Searching hacks quickly
+
+- One Google search covers several departure airports
+  (`gflights.py url --cabin economy BSL+GVA+MXP+MUC+FRA-GIG@… GIG-BSL+GVA+MXP+MUC+FRA@…`);
+  each card names its airport. Search the hubs you could fly to first
+  (`LIS+MAD+CDG+AMS`) the same way.
+- Split one-ways and multi-city legs open directly from `gflights.py url`.
+- Run hack searches on Google in one session while sellers are repriced in
+  another (`browser-engines.md`, parallel work).
+- Price a hack's cheap part first and let `rank` prune: in the ZRH–GIG run the
+  economy split (CHF 948 + 980) and TAP's stopover (CHF 2,744.75) were pruned
+  automatically against the qualified CHF 1,923.08.
+
 ## Stopover construction
 
 1. Price the carrier's own stopover or multi-city tool first, so every sector

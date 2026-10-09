@@ -10,9 +10,12 @@ This document states the boundary and the evidence rules; the skill
 - **Engine ladder.** Prefer the user's own browser (Claude in Chrome, the Claude
   desktop built-in browser, Cowork's browser), then a persistent browser-act
   browser, then a headless browser. Record the engine with every source state.
-- **Pace like a person.** One site at a time, deep links over refilled forms,
-  pauses between searches, optional cookies declined once per site and the
-  session kept.
+- **Pace like a person.** One search at a time on each site with pauses between
+  searches (different sites may run in parallel sessions), deep links over
+  refilled forms, optional cookies declined once per site and the session kept.
+  Speed comes from fewer searches (one FlightList range search for a flexible
+  window) and from reading the page's own ready signal, never from evading a
+  site's limits.
 - **Challenges.** On a CAPTCHA, press-and-hold check, "unusual traffic" page,
   bot page or HTTP 403/429, stop that site for the run. A user watching their
   own browser may complete the check themselves; otherwise record the source as

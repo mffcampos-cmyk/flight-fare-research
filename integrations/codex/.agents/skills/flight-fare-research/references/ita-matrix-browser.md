@@ -34,7 +34,13 @@ Use the UI's locale format and replace the example dates.
 
 ## Cabin selector
 
-Open `mat-select[formcontrolname="cabin"]`, then select the exact accessible option. Observed labels include `Premium Economy` and `Business class or higher`; verify the current labels rather than assuming them.
+Open `mat-select[formcontrolname="cabin"]`, then select the exact accessible option. On 2026-10-08 the options were exactly `Cheapest available`, `Premium Economy`, `Business class or higher` and `First class`. Picking a label that does not exist leaves `Cheapest available` selected without any error, so read the select's text back before searching.
+
+Matrix does not label mixed cabins: its premium economy and first-class results for ZRH–GIG included domestic and intra-Europe legs that have no such cabin. Record the cabin filter, not a cabin label, and confirm the segment cabins on the seller.
+
+## Currency and submit
+
+Type the code in the field labelled `Currency` (placeholder `Default (currency of sales city)`) and pick the option containing it, e.g. `Swiss Franc (CHF)`. The search button's text is `search Search` (icon name plus label); match it by `endsWith('Search')`. The results URL is `/flights?search=…`, and each fare in `Complete Trips` links to `/itinerary?search=…` with its own solution id.
 
 ## Session pitfall
 

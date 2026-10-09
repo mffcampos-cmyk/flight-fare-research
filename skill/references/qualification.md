@@ -89,7 +89,9 @@ several legs in one direction). `add` refuses rows whose cabin, dates or
 airports differ from the run's contract.
 
 Save it with `run_log.py add --run <dir> --row FILE` (or `--row -` from stdin) the moment
-you have read the page; rows are append-only, so a crash loses nothing.
+you have read the page; rows are append-only, so a crash loses nothing. `add`
+also takes a JSON array or JSON Lines, so a page of cards is one call; if any
+row is invalid, none is saved.
 Attempts that showed no fare go in too, with `"outcome": "blocked"`, `"empty"`
 or `"error"`.
 
@@ -101,11 +103,23 @@ or `"error"`.
 | `duration unknown (out)` | Read the elapsed time from the itinerary details |
 | `list fare not repriced` | Reach the seller's completed price page |
 | `baggage unverified` | Price a bag-inclusive family, or add the bag at the seller |
-| `bag fee unknown` | Read the explicit fee on the seller's page |
+| `bag fee unknown` | Read the explicit fee on the seller's page; if it appears only after passenger details, use a bag-inclusive family from a seller that shows it (below) |
 | `positioning unpriced` (any part) | Price the train/flight/hotel on its own site |
 | `currency differs; no fx recorded` | Add `fx` with rate, date and source |
 | `per-person price with infants; record the total` | Record the booking total |
 | `cabin bag unverified` / `cabin bag fee unknown` | Read the cabin-bag allowance or fee on the seller's page |
+
+## Sellers that show bags and the total before passenger details
+
+Observed 2026-10-08 on a BrowserAct `chrome` browser; recipes in the files named.
+
+| Seller | What it shows | Record |
+|---|---|---|
+| Kiwi.com fare page, from FlightList `Book Flight` (`flightlist-browser.md`) | The airline's families (e.g. KLM Light / Standard / Flex) with bags and totals including Kiwi's fees | `completed`; the bag family as `included` |
+| TAP deep link (`airline-direct.md`) | Per-direction family panels with hold bags; round-trip total beside `Continue` | `completed`; `included` when both families list a hold bag |
+| eDreams checkout summary (`edreams-browser.md`) | Fare text (e.g. `Economy Light … Kein Aufgabegepäck`) and `Normalpreis` | `completed`; without a bag `fee_required`, `bag_fee: null` |
+| Google Flights booking page (`google-flights-browser.md`) | The bag line (`No checked bags`, `1st checked bag … fee`); providers can be hidden by location | evidence for the bag state only; the price stays `list` |
+| airfrance.ch, klm.ch, swiss.com | Blocked on BrowserAct `chrome` | try the user's own browser, or Kiwi for AF/KLM families |
 
 ## Closing a comparison without a qualified row
 

@@ -1,8 +1,59 @@
 # FlightList browser interaction (flightlist.io)
 
-FlightList is a Kiwi-backed discovery source for broad date-range scans.
-Its jQuery daterangepicker supports different interaction paths by environment;
-verify committed dates rather than assuming one event method always works.
+FlightList is a Kiwi-backed discovery source for broad date-range scans, and
+the fastest way to cover a flexible window: one search over a departure range
+and a return range lists the cheapest itineraries across every date pair, with
+both directions. Its jQuery daterangepicker supports different interaction
+paths by environment; verify committed dates rather than assuming one event
+method always works.
+
+## Whole window in one search
+
+Set the departure picker to the whole outbound range and the return picker to
+the whole return range (instance method below, start and end different), set
+`#limit` to `200` and `#sort` to `price`, and search. On 2026-10-09 one such
+search (ZRH–GIG, 18–22 Dec × 10–14 Jan) returned 200 itineraries across 15 of
+the 25 pairs in 23 seconds; the same pairs had taken 25 Google searches.
+
+Read every card with its hidden segment details (`textContent`, not
+`innerText`, so collapsed segments with dates and flight numbers are included):
+
+```js
+JSON.stringify([...document.querySelectorAll('li.flight')].map(c => ({
+  price: c.querySelector('.price')?.textContent.trim(),
+  text: c.textContent.replace(/\s+/g, ' ').trim(),
+  book: ([...c.querySelectorAll('a')].find(a => a.href.includes('kiwi.com')) || {}).href || null })))
+```
+
+Save that JSON and turn it into rows for the run:
+
+```bash
+python3 <skill_dir>/scripts/flightlist.py rows --run <run dir> cards.json \
+  | python3 <skill_dir>/scripts/run_log.py add --run <run dir> --row -
+```
+
+`rows` keeps the cheapest card within the duration cap for each date pair
+(`--top N` for more), plus the cheapest card overall when it breaks the cap and
+is cheaper, and prints the pairs no card covered. The 200 cards are the
+cheapest 200 of the whole window, so expensive pairs can be missing: search
+again with the outbound range narrowed to the missing days, or confirm those
+pairs on Google (`gflights.py sweep --pairs …`). Cards that combine unrelated carriers (easyJet + Ryanair + GOL)
+are Kiwi combinations: the notes flag them as possible self-transfers, which
+the Kiwi fare page confirms.
+
+## From a card to a seller's price: the Kiwi fare page
+
+A card's `Book Flight` link opens `kiwi.com/en/booking/fare-selection/`, which
+shows the airline's own fare families for that itinerary with what each
+includes and the total with Kiwi's fees, before any passenger detail. For KLM
+ZRH–GIG 22 Dec / 12 Jan it showed `Light` CHF 1,555.26 (no checked bag),
+`Standard` CHF 1,923.08 (23 kg bag) and `Flex` CHF 2,131.25. That page is a
+completed quote: record the cheapest family that includes the requested bags
+with `quote_state: "completed"` and `baggage: "included"`. The FlightList card
+for the same itinerary, searched with one checked bag, said CHF 1,750.91,
+which matched neither family: a FlightList price is never the bag-inclusive
+total. Kiwi's own results URLs redirected to the home page in the same run;
+enter through `Book Flight`.
 
 ## Airport selection
 
@@ -18,7 +69,8 @@ without a key code, for example a CDP `Input.dispatchKeyEvent` that omits
 `windowsVirtualKeyCode`. Type real keys, or send each character's virtual key
 code (`Z`=90, `R`=82, `H`=72). This was verified on 2026-10-03: with key codes,
 `ZRH`/`LIS` resolved to `airport:ZRH`/`airport:LIS`. Without them no suggestion
-appeared, which looks like a dead site but is a recipe error.
+appeared, which looks like a dead site but is a recipe error. BrowserAct's
+`input <index> "ZRH"` types real keys and opened the suggestions (2026-10-08).
 
 ## Form settings
 

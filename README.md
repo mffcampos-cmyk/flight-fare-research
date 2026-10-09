@@ -8,8 +8,8 @@ baggage, journey time and route hacks, and keeps evidence for every price it
 recommends.
 
 It is an agent workflow with browser recipes, not a flight-search engine. The
-agent does the searching in a browser; two small Python scripts keep the books.
-It never books flights or handles payments.
+agent does the searching in a browser; small Python scripts keep the books and
+speed up the two biggest sources. It never books flights or handles payments.
 
 ## The key rule
 
@@ -49,6 +49,13 @@ are unfinished.
 - `skill/scripts/source_ledger.py`: which sources work on which browser engine,
   from a fixed canary search. Stored under `$FFR_LEDGER` or the same state
   directory. Never commit either file: both hold raw local evidence.
+- `skill/scripts/gflights.py`: exact Google Flights search URLs for any cabin,
+  one-way, multi-city or several airports at once; a results-page parser; and
+  an unattended sweep through a BrowserAct session that verifies each page and
+  records list-fare rows.
+- `skill/scripts/flightlist.py`: turns one FlightList date-range search into
+  rows for every date pair it covers, so a flexible window is discovered in one
+  search instead of one per pair.
 
 ## Browsers and bot walls
 

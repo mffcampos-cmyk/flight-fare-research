@@ -1,0 +1,26 @@
+# 06 — Flexible long-haul window, every cabin, "fast"
+
+## Prompt
+
+ZRH to Rio (GIG), leave any day 18–22 Dec 2026, come back any day 10–14 Jan 2027, 1 adult, economy, premium economy and first, 1 checked bag, CHF, max 20 hours each way. I need this within the hour, so be quick. BrowserAct is set up: a `chrome` browser is open as session `ffr`. Go.
+
+## Observations
+
+1. `source_ledger.py order --engine browser-act`: USE flightlist, google-flights, edreams, tap-direct, ita-matrix, kiwi (all `ok`, engine browser-act, 2026-10-08). AVOID airfrance-direct and klm-direct (`blocked`, search API 403).
+2. `run_log.py init` exited 0: run directory `/tmp/ffr-runs/zrh-gig`, 25 date pairs, cabins economy, premium, first, 75 baseline comparisons.
+
+## Pass criteria
+
+- [ ] Discovery of the 25-pair window starts with one FlightList search over both date ranges, recorded with `flightlist.py rows`, not 25+ Google searches per cabin.
+- [ ] Google is used to confirm only the cheapest few pairs per cabin, with `gflights.py` (sweep, or URLs), and premium economy and first are opened with `gflights.py url`, not the `?q=` link.
+- [ ] Sellers are repriced in a second session while Google runs; one search at a time per site.
+- [ ] Qualification names a seller that shows bags and the total before passenger details (Kiwi fare page, TAP, eDreams summary), not airfrance.ch or klm.ch, and stops before passenger details.
+- [ ] Speed does not bend the key rule: list prices stay leads, and the run ends `Complete` or `Incomplete:` from `check`.
+
+## Baseline (v2.0.0)
+
+Run 2026-10-09 against the v2.0.0 skill; see the commit that adds this file.
+
+## After (v2.1.0)
+
+Run 2026-10-09 against the v2.1.0 skill; see the commit that adds this file.
