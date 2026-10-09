@@ -44,3 +44,10 @@ Google. The skill says never to operate a session you did not open (the v2.0.0
 agent respected it); `gflights.py sweep` defaulted to `--session ffr` and the
 recipe example used it. Fixed: `--session` is required and the examples open
 the agent's own session (`test_cli_sweep_needs_a_session_the_agent_opened`).
+
+Re-run after the fix: all six criteria pass. The agent opened its own sessions
+(`ffr-fl`, `ffr-gf`, `ffr-kiwi`, `ffr-tap`), stated "I never drive session
+`ffr`", piped one FlightList range search per cabin through `flightlist.py
+rows`, swept three pairs per cabin with `gflights.py sweep --session ffr-gf`,
+kept Google to about 15 searches, and treated the dated ZRH–GIG prices in
+`historical-observations.md` as "not evidence".
