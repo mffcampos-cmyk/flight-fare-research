@@ -38,7 +38,7 @@ def test_warns_about_cheaper_unqualified_leads():
     recs = records(row(), row(family="edreams", source="edreams", tickets=[ticket(price=250.0, quote_state="list")]))
     result = run_log.check(quick(), recs)
     assert result["complete"] is True
-    assert result["warn"] == ["economy: lead r2 may beat best qualified (LB 250.00 < 400.00)"]
+    assert result["warn"] == ["economy: 1 lead may beat best qualified 400.00 CHF; cheapest: r2 LB 250.00"]
 
 def test_hack_cell_open_while_lead_could_win():
     recs = records(row(), row(hack="split", tickets=[ticket(price=300.0, quote_state="list")]), blocked())

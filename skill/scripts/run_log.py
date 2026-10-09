@@ -6,10 +6,10 @@ search contract, the expected comparisons, every observation row, the computed
 lead/qualified status of each row, and whether the run is complete.
 
   run_log.py init --contract FILE [--runs-root DIR]
-  run_log.py add --row FILE|- [--run DIR]
+  run_log.py add --row FILE|- [--run DIR]    one row, a JSON array, or JSON Lines
   run_log.py resolve CELL --as na|no_fare|none_qualify --reason TEXT [--run DIR]
   run_log.py coverage [--run DIR] [--json]
-  run_log.py rank [--run DIR] [--cabin C] [--json]
+  run_log.py rank [--run DIR] [--cabin C] [--top N] [--json]
   run_log.py check [--run DIR] [--json]     exit 0 complete, 4 incomplete
 
 Exit 2 means a usage or validation error. Runs live in $FFR_RUNS, else
@@ -527,7 +527,7 @@ def risk_flags(row: dict, contract: dict) -> list[str]:
     components = row.get("components") or {}
     flags = []
     label = row.get("cabin_label") or ""
-    if "+" in label:
+    if "+" in label or "mixed" in label.lower():
         flags.append(f"mixed cabin: {label}")
     if any(d.get("airport_change") for d in dirs):
         flags.append("airport change")
@@ -657,13 +657,17 @@ def check(contract: dict, records: list[dict]) -> dict:
     cur = contract["currency"]
     for cab, v in rank(contract, records).items():
         for lead in v["leads"]:
-            if not lead["comparable"]:
-                if v["best"] is not None:
-                    warn.append(f"{cab}: lead {lead['id']} is priced in {lead['currency']} without fx; "
-                                f"not comparable with best qualified ({v['best']:.2f} {cur})")
-            elif v["best"] is not None and not lead["pruned"]:
-                warn.append(f"{cab}: lead {lead['id']} may beat best qualified "
-                            f"(LB {lead['lower_bound']:.2f} < {v['best']:.2f})")
+            if not lead["comparable"] and v["best"] is not None:
+                warn.append(f"{cab}: lead {lead['id']} is priced in {lead['currency']} without fx; "
+                            f"not comparable with best qualified ({v['best']:.2f} {cur})")
+        cheaper = [lead for lead in v["leads"]
+                   if lead["comparable"] and v["best"] is not None and not lead["pruned"]]
+        if cheaper:
+            shown = ", ".join(f"{lead['id']} LB {lead['lower_bound']:.2f}" for lead in cheaper[:3])
+            more = f" (+{len(cheaper) - 3} more)" if len(cheaper) > 3 else ""
+            noun = "lead" if len(cheaper) == 1 else "leads"
+            warn.append(f"{cab}: {len(cheaper)} {noun} may beat best qualified {v['best']:.2f} {cur}; "
+                        f"cheapest: {shown}{more}")
         if v["best"] is None and v["leads"]:
             warn.append(f"{cab}: no qualified option; {len(v['leads'])} lead(s) unverified")
         families = sorted({e["row"].get("family") for e in every
@@ -805,41 +809,103 @@ def cmd_init(args) -> int:
 
 def cmd_add(args) -> int:
     run_dir = resolve_run_dir(args.run)
-    row = _read_json(args.row)
+    rows = _read_rows(args.row)
     with locked(run_dir):
-        return _add(run_dir, row)
-
-
-def _add(run_dir: str, row) -> int:
-    contract, records = load_run(run_dir)
-    errors = validate_row(row, contract)
-    ids = {r["id"] for r in records if r.get("type") == "row"}
-    if isinstance(row, dict) and row.get("supersedes") and row["supersedes"] not in ids:
-        errors.append(f"supersedes names {row['supersedes']}, which is not in this run")
-    if errors:
-        raise UsageError("invalid row (nothing saved):\n" + "\n".join(f"  - {e}" for e in errors))
-    row_id = f"r{len(ids) + 1}"
-    record = dict(row, type="row", id=row_id,
-                  added_at=datetime.now().astimezone().isoformat(timespec="seconds"))
-    append_record(run_dir, record)
-    status, reasons = row_status(record, contract, _superseded(records + [record]))
-    print(f"{row_id} {status}" + (": " + "; ".join(reasons) if reasons else ""))
+        for row_id, status, reasons in add_rows(run_dir, rows):
+            print(f"{row_id} {status}" + (": " + "; ".join(reasons) if reasons else ""))
     return EXIT_OK
+
+
+def _read_rows(path: str) -> list:
+    """One row object, a JSON array of rows, or JSON Lines (one row per line)."""
+    try:
+        if path == "-":
+            text = sys.stdin.read()
+        else:
+            with open(path, encoding="utf-8") as handle:
+                text = handle.read()
+    except OSError as exc:
+        raise UsageError(f"cannot read rows from {path}: {exc}")
+    try:
+        data = json.loads(text)
+    except ValueError:
+        try:
+            data = [json.loads(line) for line in text.splitlines() if line.strip()]
+        except ValueError as exc:
+            raise UsageError(f"cannot read JSON from {path}: {exc}")
+    return data if isinstance(data, list) else [data]
+
+
+def add_rows(run_dir: str, rows: list) -> list[tuple[str, str, list[str]]]:
+    """Validate every row, then append them all (or nothing). Caller holds the run lock.
+    Returns (id, status, reasons) per row, in order."""
+    contract, records = load_run(run_dir)
+    ids = {r["id"] for r in records if r.get("type") == "row"}
+    problems = []
+    for n, row in enumerate(rows, 1):
+        errors = validate_row(row, contract)
+        if isinstance(row, dict) and row.get("supersedes") and row["supersedes"] not in ids:
+            errors.append(f"supersedes names {row['supersedes']}, which is not in this run")
+        label = f"row {n}: " if len(rows) > 1 else ""
+        problems.extend(f"{label}{e}" for e in errors)
+    if not rows:
+        problems.append("no rows given")
+    if problems:
+        raise UsageError("invalid row (nothing saved):\n" + "\n".join(f"  - {e}" for e in problems))
+    stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    added = []
+    for row in rows:
+        record = dict(row, type="row", id=f"r{len(ids) + 1}", added_at=stamp)
+        ids.add(record["id"])
+        append_record(run_dir, record)
+        records.append(record)
+        added.append(record)
+    superseded = _superseded(records)
+    return [(r["id"], *row_status(r, contract, superseded)) for r in added]
+
+
+def _legs(row: dict) -> list[dict]:
+    keys = ("dir", "from", "to", "dep", "arr", "duration", "stops", "airlines")
+    return [{k: d.get(k) for k in keys} for d in row.get("directions") or [] if isinstance(d, dict)]
 
 
 def _public(entry: dict) -> dict:
     row = entry["row"]
+    tickets = row.get("tickets") or []
     out = {k: v for k, v in entry.items() if k != "row"}
     out.update({"source": row.get("source"), "family": row.get("family"), "url": row.get("url"),
                 "retrieved_at": row.get("retrieved_at"), "hack": row.get("hack"),
-                "booking_urls": [t.get("booking_url") for t in row.get("tickets") or [] if t.get("booking_url")]})
+                "origin": row.get("origin"), "destination": row.get("destination"),
+                "outbound_date": row.get("outbound_date"), "return_date": row.get("return_date"),
+                "cabin_label": row.get("cabin_label"),
+                "providers": [t.get("provider") for t in tickets if t.get("provider")],
+                "legs": _legs(row),
+                "booking_urls": [t.get("booking_url") for t in tickets if t.get("booking_url")]})
     return out
+
+
+def _trip_text(row: dict) -> str:
+    dates = "/".join(d for d in (row.get("outbound_date"), row.get("return_date")) if d)
+    return f"{row.get('origin')}-{row.get('destination')} {dates}"
+
+
+def _leg_lines(row: dict, indent: str) -> list[str]:
+    lines = []
+    for leg in _legs(row):
+        dep, arr = str(leg["dep"] or "?").replace("T", " ")[:16], str(leg["arr"] or "?").replace("T", " ")[:16]
+        stops = leg["stops"]
+        stop_text = f"{stops} stop" + ("" if stops == 1 else "s")
+        airlines = ", ".join(leg["airlines"] or []) if isinstance(leg["airlines"], list) else leg["airlines"]
+        lines.append(f"{indent}{leg['dir']} {dep} -> {arr}  {str(leg['duration'])[:5]}  {stop_text}  {airlines}")
+    return lines
 
 
 def cmd_rank(args) -> int:
     contract, records = load_run(resolve_run_dir(args.run))
     if args.cabin and args.cabin not in contract["cabins"]:
         raise UsageError(f"cabin {args.cabin} is not in this run's contract")
+    if args.top is not None and args.top < 0:
+        raise UsageError("--top must be 0 or more")
     ranked = rank(contract, records, args.cabin)
     if args.json:
         print(json.dumps({cab: {"best": v["best"], "qualified": [_public(e) for e in v["qualified"]],
@@ -852,18 +918,30 @@ def cmd_rank(args) -> int:
         for n, e in enumerate(v["qualified"], 1):
             row = e["row"]
             hack = f" [{row['hack']}]" if row.get("hack") else ""
-            flags = f"  flags: {', '.join(e['flags'])}" if e["flags"] else ""
-            print(f"  {n}. {e['id']}{hack} {e['all_in']:.2f} {row.get('source')} {row.get('retrieved_at')}{flags}")
+            print(f"  {n}. {e['id']}{hack} {e['all_in']:.2f} {row.get('source')} {_trip_text(row)}"
+                  f"  retrieved {row.get('retrieved_at')}")
+            for line in _leg_lines(row, "       "):
+                print(line)
+            sellers = ", ".join(t.get("provider") or "?" for t in row.get("tickets") or [])
+            links = " ".join(t.get("booking_url") for t in row.get("tickets") or [] if t.get("booking_url"))
+            print(f"       seller: {sellers}  book: {links or '-'}")
+            if e["flags"]:
+                print(f"       flags: {', '.join(e['flags'])}")
         if not v["qualified"]:
             print("  (none)")
         print(f"== {cab}: leads (not verified; lower bound, never a price)")
-        for e in v["leads"]:
+        shown = v["leads"] if args.top is None else v["leads"][:args.top]
+        for e in shown:
             row = e["row"]
             hack = f" [{row['hack']}]" if row.get("hack") else ""
             pruned = f"  pruned: LB {e['lower_bound']:.2f} >= best {v['best']:.2f}" if e["pruned"] else ""
             note = "" if e["comparable"] else "  (no fx: not comparable)"
-            print(f"  {e['id']}{hack} LB {e['lower_bound']:.2f} {e['currency']}: "
+            print(f"  {e['id']}{hack} LB {e['lower_bound']:.2f} {e['currency']} {_trip_text(row)}: "
                   f"{'; '.join(e['reasons'])}{pruned}{note}")
+            for line in _leg_lines(row, "      "):
+                print(line)
+        if len(shown) < len(v["leads"]):
+            print(f"  (+{len(v['leads']) - len(shown)} more leads)")
         if not v["leads"]:
             print("  (none)")
     return EXIT_OK
@@ -941,13 +1019,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--contract", required=True, help="contract JSON file, or - for stdin")
     p.add_argument("--runs-root", help="directory holding runs (default: see module docstring)")
     p.set_defaults(func=cmd_init)
-    p = sub.add_parser("add", help="append one observation row (saved immediately)")
-    p.add_argument("--row", required=True, help="row JSON file, or - for stdin")
+    p = sub.add_parser("add", help="append observation rows (saved immediately; all or nothing)")
+    p.add_argument("--row", required=True,
+                   help="row JSON file, or - for stdin: one object, a JSON array, or JSON Lines")
     p.add_argument("--run", help="run directory (default: most recent run)")
     p.set_defaults(func=cmd_add)
     p = sub.add_parser("rank", help="qualified options by all-in total, then leads")
     p.add_argument("--run", help="run directory (default: most recent run)")
     p.add_argument("--cabin", help="only this cabin")
+    p.add_argument("--top", type=int, help="list at most N leads per cabin (text output)")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_rank)
     p = sub.add_parser("resolve", help="close a comparison that legitimately has no qualified row")
