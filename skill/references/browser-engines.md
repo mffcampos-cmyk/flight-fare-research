@@ -103,8 +103,8 @@ skill uses only those.
    are valid only until the page changes; never reuse old numbers, and never
    operate a session you did not open.
 4. Read results with `get markdown` (or `eval` for a recipe's page code) and
-   add rows to `run_log.py` as you go. `scripts/gflights.py sweep --session <name>`
-   drives a whole Google Flights batch through your session.
+   add rows to `run_log.py` as you go. `scripts/gflights.py sweep --session <your session>`
+   drives a whole Google Flights batch through the session you opened.
 5. A site can block silently: the page stays on a spinner while its own search
    requests fail. `browser-act --session <name> network requests --status 403`
    (or 429) shows them; that is a block (record it), not a slow page.

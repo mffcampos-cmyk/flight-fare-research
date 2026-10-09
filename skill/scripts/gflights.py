@@ -11,9 +11,10 @@
       challenge), the cabin the page has selected, the dates its "Track prices" line
       repeats, and one card per listed itinerary (the first leg only). --anchor is the
       date of the leg the list shows; it fixes the year of "Dec 22" style dates.
-  gflights.py sweep --run DIR [--cabins C,...] [--pairs OUT[_RET],...] [--origin X]
-                    [--destination Y] [--top N] [--pause S] [--session NAME]
-      Drives an open BrowserAct session (the browser-act CLI): one search per date pair
+  gflights.py sweep --session NAME --run DIR [--cabins C,...] [--pairs OUT[_RET],...]
+                    [--origin X] [--destination Y] [--top N] [--pause S]
+      Drives a BrowserAct session you opened yourself (the browser-act CLI; never the
+      user's session): one search per date pair
       and cabin of a run_log.py run, waits for the first priced card instead of a fixed
       delay, checks that the page repeats the cabin and dates, and records the cheapest
       cards within the duration cap as list-fare rows. Stops at the first challenge.
@@ -358,7 +359,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--destination")
     p.add_argument("--top", type=int, default=3, help="cards recorded per search (default 3)")
     p.add_argument("--pause", type=float, default=12, help="seconds between searches (default 12)")
-    p.add_argument("--session", default="ffr", help="BrowserAct session name (default ffr)")
+    p.add_argument("--session", required=True,
+                   help="your own BrowserAct session (browser-act --session NAME browser open <id> <url>); "
+                        "never the user's")
     p.add_argument("--browser-act", dest="binary", help="path to the browser-act CLI")
     args = parser.parse_args(argv)
     try:

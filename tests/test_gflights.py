@@ -217,3 +217,9 @@ def test_cli_bad_leg_exits_2():
     r = subprocess.run([sys.executable, "-B", str(GF), "url", "--cabin", "economy", "ZRH@2026-12-22"],
                        capture_output=True, text=True)
     assert r.returncode == 2 and "Traceback" not in r.stderr
+
+
+def test_cli_sweep_needs_a_session_the_agent_opened(tmp_path):
+    # no default session name: an agent must not drive the user's session by accident
+    r = subprocess.run([sys.executable, "-B", str(GF), "sweep", "--run", str(tmp_path)], capture_output=True, text=True)
+    assert r.returncode == 2 and "--session" in r.stderr

@@ -16,11 +16,31 @@ ZRH to Rio (GIG), leave any day 18–22 Dec 2026, come back any day 10–14 Jan 
 - [ ] Sellers are repriced in a second session while Google runs; one search at a time per site.
 - [ ] Qualification names a seller that shows bags and the total before passenger details (Kiwi fare page, TAP, eDreams summary), not airfrance.ch or klm.ch, and stops before passenger details.
 - [ ] Speed does not bend the key rule: list prices stay leads, and the run ends `Complete` or `Incomplete:` from `check`.
+- [ ] Every BrowserAct command runs in a session the agent opened itself; the user's `ffr` session is never driven.
 
 ## Baseline (v2.0.0)
 
-Run 2026-10-09 against the v2.0.0 skill; see the commit that adds this file.
+Run 2026-10-09 against the v2.0.0 skill.
+
+| Criterion | Result |
+|---|---|
+| One FlightList range search, recorded with `flightlist.py rows` | **partial**: three range searches (one per cabin), reasoned from the confirmed cartesian dates, but a throwaway parser written on the spot, and Google run pair by pair in parallel ("about 10–12 pairs by T+15") |
+| Google confirms only the cheapest pairs; premium/first via `gflights.py url` | **fail**: `?q=` links for every pair, the link that opens the home page for premium and first |
+| Sellers repriced in a second session; one search at a time per site | pass (own sessions `ffr-fl`, `ffr-gf`, `ffr-tap`) |
+| A seller showing bags before passenger details; no AF/KLM; stop before passenger details | **partial**: Google booking page and TAP; no Kiwi fare page for AF/KLM fares |
+| Key rule kept under time pressure | pass |
 
 ## After (v2.1.0)
 
-Run 2026-10-09 against the v2.1.0 skill; see the commit that adds this file.
+Run 2026-10-09 against the v2.1.0 skill: all five criteria pass. One FlightList
+range search per cabin piped through `flightlist.py rows` into `run_log.py add`;
+`gflights.py sweep` on the three cheapest pairs per cabin ("at most 9 searches;
+staying well under the roughly 90-per-day limit"); TAP, Kiwi fare page and
+eDreams summary repriced in parallel sessions; AF/KLM fares qualified through
+Kiwi's fare page; `Complete` or `Incomplete:` from `check`.
+
+New failure found: the agent drove the user's session `ffr` for FlightList and
+Google. The skill says never to operate a session you did not open (the v2.0.0
+agent respected it); `gflights.py sweep` defaulted to `--session ffr` and the
+recipe example used it. Fixed: `--session` is required and the examples open
+the agent's own session (`test_cli_sweep_needs_a_session_the_agent_opened`).

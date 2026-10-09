@@ -40,13 +40,15 @@ repeated dates and every card (price, local times with dates, duration, stops,
 airlines and operator, departure and arrival airports, layovers, mixed-cabin
 label) as JSON.
 
-**Sweep many pairs unattended (BrowserAct).** With a BrowserAct session open
-(`browser-engines.md`), one command runs a search per cabin and date pair of
-the run, verifies each page, records the cheapest cards within the duration
-cap as list rows and stops at the first challenge:
+**Sweep many pairs unattended (BrowserAct).** Open your own session on the
+browser first (`browser-act --session ffr-gf browser open <browser id>
+https://www.google.com/travel/flights`; never drive a session the user or
+another agent opened, `browser-engines.md`). One command then runs a search per
+cabin and date pair of the run, verifies each page, records the cheapest cards
+within the duration cap as list rows and stops at the first challenge:
 
 ```bash
-python3 $G sweep --run <run dir> --session ffr --cabins economy,business \
+python3 $G sweep --session ffr-gf --run <run dir> --cabins economy,business \
   --pairs 2026-12-22_2027-01-12,2026-12-21_2027-01-13 --top 3 --pause 12
 ```
 
