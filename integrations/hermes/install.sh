@@ -8,7 +8,7 @@
 #   3. $HERMES_HOME/skills when set and HERMES_HOME != HOME (rooted installs)
 #   4. ~/.hermes/skills/         Hermes default
 #
-# The canonical tree lives at <repo>/skill (SKILL.md + references/). This
+# The canonical tree lives at <repo>/skill (SKILL.md, references/, scripts/). This
 # script removes any prior flat $target/flight-fare-research/ copy first and
 # copies fresh, so stale files never linger (idempotent install).
 # Existing category-based copies are not deleted automatically; choose an
@@ -50,6 +50,8 @@ cp -R "${SKILL_SRC}" "${DEST}"
 echo "Installed flight-fare-research skill to: ${DEST}"
 echo "  SKILL.md:  ${DEST}/SKILL.md"
 echo "  references: ${DEST}/references/"
-echo "Note: browser-act is preferred but optional; without it the skill uses the host browser tool."
+echo "Browser: the skill uses the highest engine available (user browser, browser-act, then headless); see references/browser-engines.md."
+RUNS="${FFR_RUNS:-${XDG_STATE_HOME:-${HOME}/.local/state}/flight-fare-research/runs}"
+echo "Run logs (runtime state, outside the skill): ${RUNS}"
 LEDGER="${FFR_LEDGER:-${XDG_STATE_HOME:-${HOME}/.local/state}/flight-fare-research/source-status.json}"
 echo "Source ledger (runtime state, outside the skill): ${LEDGER}"

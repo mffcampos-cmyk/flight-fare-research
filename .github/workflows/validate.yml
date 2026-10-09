@@ -38,8 +38,14 @@ jobs:
           fi
           echo "No packaging drift: generated copies committed and unchanged."
 
+      - name: Upload Cowork skill zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: flight-fare-research-cowork
+          path: dist/flight-fare-research-cowork.zip
+
       - name: Install test dependencies
-        run: python3 -m pip install pytest
+        run: python3 -m pip install 'pytest>=8,<10'
 
       - name: Run static rule tests
         run: python3 -m pytest tests/ -v

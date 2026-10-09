@@ -1,7 +1,9 @@
 {
   "name": "flight-fare-research",
-  "description": "Evidence-based live airfare research skill (browser-act preferred, host browser fallback; no booking).",
-  "version": "1.1.1",
-  "author": { "name": "Flight Fare Research contributors" },
+  "description": "Evidence-qualified airfare research: intake, exact-date collection, route hacks, lead vs qualified gates (research only, never books).",
+  "version": "2.1.0",
+  "author": {
+    "name": "Flight Fare Research contributors"
+  },
   "license": "MIT"
 }

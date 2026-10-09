@@ -28,3 +28,85 @@ ZRH→LIS 2026-11-02/09, 1 adult, economy, CHF. Google Flights `?q=` link: ok, 8
 ## Headed re-probe (2026-10-03, system Chromium, same canary)
 
 Both earlier failures were recipe gaps. FlightList: ok once key events carried a real `keyCode`; 100 cards, all on the exact dates in CHF. eDreams.ch: ok after declining consent via the `Weiter ohne Zustimmung` link and clicking `Weitere 30 Ergebnisse anzeigen`; 6 cards with both directions, hand-baggage labels, and struck regular vs Prime price. Headless Chromium was not shown to be the cause.
+
+## Blocked public frontends (2026-09-20, automated browser)
+
+| Source | Failure mode |
+|---|---|
+| KAYAK | search URL redirects to `/help/bots.html` (retested) |
+| Momondo | dedicated bot page |
+| Skyscanner | person-or-robot CAPTCHA |
+| Expedia | bot challenge |
+| Kiwi (direct) | HTTP 403 / navigation failure (retested) |
+| Trip.com | provider guard |
+| Wego | Cloudflare block |
+| Jetcost | Cloudflare block |
+| PanFlights | HTTP 403 |
+| Star Alliance booking | HTTP 403 |
+| Orbitz | "Bot or Not?" human check |
+| Priceline | press-and-hold "confirm you are a human" wall |
+| CheapOair | empty DOM headless |
+| Decolar | title loads, body empty |
+| eSky | "Access Denied" |
+| JetRadar | TLS certificate error (`ERR_CERT_COMMON_NAME_INVALID`) |
+| Airwander | DNS failure; site appears defunct |
+
+FlightsFinder rendered but re-aggregates Google Flights, KAYAK, Skyscanner and
+Momondo: not an independent family.
+
+## Release smoke test (2026-09-23, ZRH–LIS 1–10 Oct 2026, 1 adult, economy, EUR)
+
+| Source | Result |
+|---|---|
+| FlightList | 100 exact-date cards; both durations parsed, all under a 20-hour cap; list fares, bags unverified |
+| Google Flights | completed provider card €353 (list €355), easyJet + Vueling on separate tickets; bag fee required; return arrives 11 Oct |
+| eDreams | six exact-date cards; sample SWISS regular €500 vs Prime €416; bags unverified |
+
+## Expansion probe (2026-10-08, headless Playwright Chromium, datacenter egress proxy)
+
+Canary ZRH⇄LIS 7–14 Nov 2026, 1 adult, economy. One paced attempt per source,
+optional cookies declined, no retries after a challenge (three still-loading
+pages got one longer wait). This is browser ladder rung 3, the most likely to be
+challenged: a block here says nothing about the user's own browser.
+
+| Source | Result |
+|---|---|
+| Google Flights (`?q=` link) | ok: search repeated, 10 round-trip cards in CHF (nonstop TAP/SWISS from CHF 134) |
+| TAP direct (deep link) | ok: search repeated, 5 direct flights, CHF per direction |
+| FlightConnections (`flights-from-zurich-zrh`) | ok (routes): 218 destinations, 61 airlines, non-stop filters |
+| Booking.com Flights (deep link) | empty: form repeated the search, then "We don't have any flights matching your search" |
+| Kiwi direct (deep link) | empty: page loads (was HTTP 403 on 2026-09-20), filters shown, no results after 45 s |
+| Aviasales (deep link) | empty: route and dates repeated, results never rendered |
+| KAYAK, Momondo | blocked: "Was ist ein Bot?" |
+| Skyscanner | blocked: press-and-hold "Are you a person or a robot?" |
+| Expedia | blocked: HTTP 429 "Bot oder Mensch?" |
+| Trip.com | blocked: HTTP 432 "whaleguard block" |
+| easyJet (deep link) | blocked: HTTP 403 Access Denied |
+| lastminute.com, Icelandair, Omio | blocked: Cloudflare challenge |
+| SWISS, Lufthansa | blocked: HTTP 403 "Security check" |
+| Iberia | blocked: HTTP 403 "connection was interrupted" |
+| Qatar Airways | blocked: HTTP 403 Access Denied |
+| SBB | blocked: HTTP 403, empty body |
+| Alternative Airlines, Gotogate, Opodo, AZair, Ryanair, Vueling, Trainline | homepage loads; search flow not driven (still untested) |
+| British Airways | "high demand" holding page (untested) |
+| KLM, Air France, Turkish Airlines | not reached: the environment's proxy reported "upstream request failed" (untested) |
+
+Takeaways: airline and rail sites guard headless sessions hardest, so price
+them in the user's own browser (rung 1). Kiwi direct and Booking.com load
+headless but returned no fares; try them on rung 1 before relying on them.
+
+## Live test run (2026-10-08/09, BrowserAct `chrome`, ZRH–GIG, 1 adult, 1 bag, CHF)
+
+Dated observations from one real run; reprice everything before relying on it.
+
+| Source | Result |
+|---|---|
+| Google Flights | 50 exact searches (25 pairs × economy, business) plus ~30 hack, premium and first searches at 12 s pacing without a challenge. `?q=` links opened the home page for premium and first; `tfs` URLs (`gflights.py url`) worked for every cabin, one-way, multi-city and five departure airports at once. Next day, after ~90 searches in 24 h, the Date grid request got HTTP 429 → `google.com/sorry`. Booking page: "Booking isn't supported yet in your location", bag line still shown. |
+| FlightList | Exact dates and a whole 5 × 5 window in one search (200 cards, 15 pairs, 23 s). Price "with 1 checked bag" (KLM, CHF 1,750.91) matched neither Kiwi family. |
+| Kiwi.com | Fare-selection page via FlightList `Book Flight`: KLM Light 1,555.26 / Standard (23 kg) 1,923.08 / Flex 2,131.25, before passenger details. Hand-built results URL redirected home. |
+| eDreams (edreams.ch) | Form flow and checkout summary worked; Economy Light without bag; bag fee only after the passenger step. |
+| ITA Matrix | Form, CHF and cabin filters worked; cheapest economy for 21 Dec / 11 Jan CHF 1,547.50 (LATAM/Iberia via MAD). |
+| TAP | Deep link worked for long haul; qualified economy CHF 1,961.95 and 2,011.95, business 4,363.00, Economy Prime ("Mixed Cabin") 2,445.85; Portugal Stopover CHF 2,744.75. Kept a stopover in browser storage across searches. |
+| Air France, KLM | Deep link prefilled the form; search API returned 403 silently. |
+| SWISS | Bot interstitial stayed: blocked. |
+| GOL | No flights offered from Lisbon on voegol.com.br; GOL/Wamos LIS–GIG sold via OTAs without a checked bag. |

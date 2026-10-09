@@ -39,4 +39,4 @@ Do not prescribe medication or supplements. If mentioning melatonin or sleep med
 
 ## 5. Output the protected itinerary
 
-Start with the recommended travel window and explain how many destination sleeps precede the event. Then give qualified economy, premium, and business options plus route hacks with any extra positioning day. Include only the jet-lag timing needed to protect the event unless the user asks for a full acclimatisation schedule. Add sightseeing or a day-by-day destination itinerary only when explicitly requested; a user who knows or has lived in the destination needs fare research, not generic tourism advice.
+Start with the recommended travel window and explain how many destination sleeps precede the event. Then give the qualified options for the requested cabins only, plus route hacks with any extra positioning day. Include only the jet-lag timing needed to protect the event unless the user asks for a full acclimatisation schedule. Add sightseeing or a day-by-day destination itinerary only when explicitly requested; a user who knows or has lived in the destination needs fare research, not generic tourism advice.

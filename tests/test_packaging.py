@@ -5,27 +5,11 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import zipfile
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def cowork_placeholder():
-    """A compliant hand-authored Cowork card for hermetic fixtures.
-
-    Used only when the committed integrations/cowork/SKILL.md has not landed
-    yet, so acceptance tests stay independent of that file's deploy state.
-    """
-    body = ("Quick full path connector browser baggage included fee required "
-            "unverified range cookies decline duration 20:00:00 per direction "
-            "retrieved timestamp currency conversion consent purchase CAPTCHA "
-            "self-transfer risk research")
-    count = len(body.split())
-    tail = " ".join(["fare"] * (1700 - count))
-    return ("---\nname: flight-fare-research\n"
-            "description: Use when researching flights.\n---\n"
-            + body + " " + tail + "\n")
 
 
 @pytest.fixture
@@ -34,10 +18,7 @@ def project(tmp_path):
     shutil.copytree(ROOT / "scripts", repo / "scripts")
     shutil.copytree(ROOT / "skill", repo / "skill")
     shutil.copytree(ROOT / "integrations", repo / "integrations")
-    cowork = repo / "integrations/cowork/SKILL.md"
-    if not cowork.is_file():
-        cowork.parent.mkdir(parents=True, exist_ok=True)
-        cowork.write_text(cowork_placeholder())
+    shutil.copy(ROOT / "CHANGELOG.md", repo / "CHANGELOG.md")
     return repo
 
 
@@ -133,11 +114,23 @@ def test_hermes_install_is_repeatable_and_preserves_other_skills(project, tmp_pa
         assert other.read_text() == "keep me"
 
 
-def test_ci_installs_pytest_before_running_tests():
+def test_package_builds_deterministic_cowork_zip(project):
+    assert run_script(project, "package.py").returncode == 0
+    z = project / "dist/flight-fare-research-cowork.zip"
+    first = z.read_bytes()
+    assert run_script(project, "package.py").returncode == 0
+    assert z.read_bytes() == first
+    names = zipfile.ZipFile(z).namelist()
+    assert names == sorted(names) and "flight-fare-research/SKILL.md" in names
+    assert "flight-fare-research/scripts/run_log.py" in names
+    assert {n.split("/", 1)[1] for n in names} == {str(p) for p in tree_bytes(project / "skill")}
+
+
+def test_ci_installs_pinned_pytest_and_uploads_zip():
     workflow = (ROOT / ".github/workflows/validate.yml").read_text()
-    install = "python3 -m pip install pytest"
-    assert install in workflow
-    assert workflow.index(install) < workflow.index("python3 -m pytest")
+    assert "python3 -m pip install 'pytest>=8,<10'" in workflow
+    assert workflow.index("pip install 'pytest") < workflow.index("python3 -m pytest")
+    assert "dist/flight-fare-research-cowork.zip" in workflow and "actions/upload-artifact@v4" in workflow
 
 
 def test_ci_secret_scan_fails_closed_on_grep_error():

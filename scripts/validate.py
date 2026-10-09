@@ -4,7 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import re
+import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 from _hash import sha256_file
@@ -15,10 +20,11 @@ GENERATED_TARGETS = (
     ROOT / "integrations" / "codex" / ".agents" / "skills" / "flight-fare-research",
     ROOT / "integrations" / "claude-code" / "skills" / "flight-fare-research",
 )
-# Cowork is intentionally hand-authored and must never enter GENERATED_TARGETS.
-COWORK_SKILL = ROOT / "integrations" / "cowork" / "SKILL.md"
+SKILL_BODY_WORD_LIMIT = 2000
+COWORK_ZIP = ROOT / "dist" / "flight-fare-research-cowork.zip"
+PLUGIN_JSON = ROOT / "integrations" / "claude-code" / ".claude-plugin" / "plugin.json"
 HAND_AUTHORED_ARTIFACTS = (
-    COWORK_SKILL,
+    ROOT / "integrations" / "cowork" / "README.md",
     ROOT / "integrations" / "codex" / "AGENTS.md",
     ROOT / "integrations" / "claude-code" / ".claude-plugin" / "plugin.json",
 )
@@ -100,36 +106,70 @@ def validate_internal_links(skill_root):
     return errors
 
 
-def validate_cowork(entry):
-    """Lint the standalone variant, never compare it to canonical bytes.
+def skill_body_word_count(text):
+    """Words in SKILL.md after its frontmatter block."""
+    return len(text[len(first_delimited_block(text)):].split())
 
-    It must stay a single self-contained file: no sibling markdown to pull in
-    (no `references/`), and no external skills or browser-act-centric tools
-    (`js()` / `cdp()` / `grounded-citations` / `browser-act`) or paths into a
-    host tree. Body word count is bounded to keep it a trimmed card.
-    """
-    text = entry.read_text(encoding="utf-8")
-    body = text[len(first_delimited_block(text)):]
+
+def validate_versions(root):
+    """SKILL.md frontmatter, plugin.json and the newest CHANGELOG entry agree."""
+    found = {}
+    skill_md = root / "skill" / "SKILL.md"
+    if skill_md.is_file():
+        frontmatter, _ = parse_frontmatter(first_delimited_block(skill_md.read_text(encoding="utf-8")))
+        found["SKILL.md"] = frontmatter.get("version")
+    plugin = root / "integrations" / "claude-code" / ".claude-plugin" / "plugin.json"
+    if plugin.is_file():
+        try:
+            found["plugin.json"] = json.loads(plugin.read_text(encoding="utf-8")).get("version")
+        except (ValueError, AttributeError):
+            found["plugin.json"] = None
+    changelog = root / "CHANGELOG.md"
+    if changelog.is_file():
+        match = re.search(r"^## \[(\d+\.\d+\.\d+)\]", changelog.read_text(encoding="utf-8"), re.M)
+        found["CHANGELOG.md"] = match.group(1) if match else None
+    else:
+        found["CHANGELOG.md"] = None
+    if None in found.values() or len(set(found.values())) != 1:
+        return ["version mismatch: " + ", ".join("%s %s" % (k, v or "missing") for k, v in found.items())]
+    return []
+
+
+def validate_scripts(skill_root):
+    """Each bundled script compiles and answers --help (no bytecode written)."""
     errors = []
-    count = len(body.split())
-    if not 1500 <= count <= 2600:
-        errors.append("Cowork: body word count %d is outside 1500–2600" % count)
+    for script in sorted((skill_root / "scripts").glob("*.py")):
+        name = script.name
+        try:
+            compile(script.read_text(encoding="utf-8"), str(script), "exec")
+        except SyntaxError as exc:
+            errors.append("scripts/%s: does not compile: %s" % (name, exc))
+            continue
+        result = subprocess.run([sys.executable, "-B", str(script), "--help"],
+                                capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            errors.append("scripts/%s: --help exited %d" % (name, result.returncode))
+    return errors
 
-    if (entry.parent / "references").is_dir():
-        errors.append("Cowork: must be standalone; `references/` sibling present")
 
-    banned = [
-        "`references/", "../", "../../",
-        "browser-act",
-        "grounded-citations",
-        "js()",
-        "cdp(",
-    ]
-    for phrase in banned:
-        if phrase in body:
-            errors.append(
-                "Cowork: standalone violation, external dependency: %r" % phrase
-            )
+def validate_zip(zip_path, canonical):
+    """When the Cowork zip exists, it must hold exactly the canonical files."""
+    if not zip_path.is_file():
+        return []
+    try:
+        with zipfile.ZipFile(zip_path) as archive:
+            actual = {name.split("/", 1)[1]: hashlib.sha256(archive.read(name)).hexdigest()
+                      for name in archive.namelist()
+                      if name.startswith("flight-fare-research/") and not name.endswith("/")}
+            outside = [n for n in archive.namelist() if not n.startswith("flight-fare-research/")]
+    except zipfile.BadZipFile as exc:
+        return ["Cowork zip: unreadable: %s" % exc]
+    expected = {path.as_posix(): digest for path, digest in canonical.items()}
+    errors = ["Cowork zip: entry outside flight-fare-research/: %s" % n for n in outside]
+    if actual != expected:
+        drift = sorted(set(actual) ^ set(expected)) + sorted(
+            k for k in set(actual) & set(expected) if actual[k] != expected[k])
+        errors.append("Cowork zip is stale (%s); run scripts/package.py" % ", ".join(drift))
     return errors
 
 
@@ -162,10 +202,13 @@ def validate_plugin_schema(plugin_path):
 
 
 def file_map(directory):
+    """SHA-256 of every packaged file, skipping bytecode caches."""
     return {
         path.relative_to(directory): sha256_file(path)
         for path in directory.rglob("*")
         if path.is_file()
+        and "__pycache__" not in path.relative_to(directory).parts
+        and path.suffix != ".pyc"
     }
 
 
@@ -237,17 +280,21 @@ def main():
                     "SKILL.md frontmatter: description too long (%d > 1024 chars)" % len(desc)
                 )
 
+        words = skill_body_word_count(skill_md)
+        if words > SKILL_BODY_WORD_LIMIT:
+            errors.append(
+                "SKILL.md: body word budget exceeded (%d > %d); move detail into references"
+                % (words, SKILL_BODY_WORD_LIMIT)
+            )
         errors.extend(validate_internal_links(CANONICAL_SKILL))
-        errors.extend(
-            validate_plugin_schema(ROOT / "integrations/claude-code/.claude-plugin/plugin.json")
-        )
+        errors.extend(validate_plugin_schema(PLUGIN_JSON))
+        errors.extend(validate_versions(ROOT))
+        errors.extend(validate_scripts(CANONICAL_SKILL))
+        errors.extend(validate_zip(COWORK_ZIP, canonical))
 
         for artifact in HAND_AUTHORED_ARTIFACTS:
             if artifact.is_file():
                 print("OK: hand-authored artifact present: %s" % artifact)
-                if artifact == COWORK_SKILL:
-                    for error in validate_cowork(artifact):
-                        errors.append(error)
             elif args.strict:
                 errors.append("planned hand-authored artifact is missing: %s" % artifact)
             else:

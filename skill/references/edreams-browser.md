@@ -78,11 +78,36 @@ is unusable to pre-seed — always drive the form.
   discount. When the card exposes `Prime discounted price` and `Regular price`,
   retain both as observations, rank the regular/non-membership price by default,
   and re-open the fare family before treating either as a final total.
-- **Currency:** record each price in the currency the site shows (eDreams may show EUR while other sources show CHF). Do not convert silently; if comparing across currencies, show a clearly labelled conversion with the exchange rate and its date, and never present the converted amount as a bookable quote. A base currency such as CHF belongs to an optional named user profile, not a universal assumption.
+- **Currency:** record each price in the currency the site shows (eDreams may show EUR while the contract is in CHF) and add `fx` with rate, date and source to compare it; the converted amount is a comparison, not a bookable quote.
 
 ## Prior-run evidence
 
 A fresh ordinary Chrome session on 2026-09-23 accepted ZRH–LIS, 2026-10-01 outbound and 2026-10-10 return, 1 adult, Economy, EUR, and returned populated itinerary cards. A prior report of a ~2.5-week minimum lead time was NOT reproduced; do not promote that observation to a provider rule. The old whole-cell text selector missed days that include fare amounts; selecting the direct day text inside the correct month worked. This is archived historical evidence (`historical-observations.md`), not a current-accessibility guarantee. Check the active departure/return field and calendar state before concluding a date is disabled.
+
+## edreams.ch labels (German, 2026-10-08)
+
+The Swiss site serves CHF. Cookie banner: `Weiter ohne Zustimmung →` (a span).
+A sign-in pop-up may follow; close it with the element labelled `Schließen`.
+Fields: `Von?`, `Nach?`, `Hinflug`, `Rückflug`; suggestions are
+`li.prisma-dropdown-item` (pick the one whose text has the IATA code and
+`Airport`/`International`); calendar titles read `Dezember '26`. Submit with
+`Flug suchen`, never `Flug + Hotel suchen`. On result cards, directions are
+`HINREISE` / `RÜCKREISE`; the bag line is `Handgepäck` (cabin bag only) or
+`Aufgabegepäck inklusive!`; prices are `Prime-Vorteilspreis` and
+`Regulärer Preis` (rank the regular price).
+
+## Checkout summary: the completed price (stop here)
+
+`Flug auswählen` on a card opens `/travel/flights/checkout/#checkout_passengers/…`.
+Before any passenger field, that page shows the airline's fare text (for example
+`Economy Light: 1 Handgepäckstück … Kein Aufgabegepäck inbegriffen`), eDreams'
+service tiers (`Basic`, `Flex`, `Super Flex`) and `Normalpreis` for the trip.
+Record `Normalpreis` with the Basic tier as a `completed` quote. The checked-bag
+price is only offered on the next step (`Weiter zu Gepäck und Extras`), after
+the passenger form, so a fare without a bag stays `fee_required` with
+`bag_fee: null` (`bag fee unknown`): do not continue to get it. Itineraries that
+mix airlines may be eDreams combinations of separate tickets (`Search+Combine`
+text on the page); say so beside the price.
 
 ## Pitfalls
 

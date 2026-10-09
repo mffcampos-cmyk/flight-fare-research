@@ -120,3 +120,79 @@ def test_history_is_capped(ledger):
     for i in range(8):
         run("record", "azair", "partial", "--evidence", f"r{i}", ledger=ledger)
     assert len(json.loads(ledger.read_text())["sources"]["azair"]["history"]) == 5
+
+
+CANDIDATES = {"lastminute", "gotogate", "aviasales", "opodo", "momondo", "trip-com", "expedia",
+              "swiss-direct", "lufthansa-direct", "easyjet-direct", "ryanair-direct", "vueling-direct",
+              "iberia-direct", "klm-direct", "airfrance-direct", "british-airways-direct", "turkish-direct",
+              "icelandair-direct", "qatar-direct", "sbb", "trainline", "omio", "flightconnections"}
+
+def test_record_stores_engine(ledger):
+    run("record", "edreams", "blocked", "--evidence", "x", "--engine", "headless-playwright", ledger=ledger)
+    src = json.loads(ledger.read_text())["sources"]["edreams"]
+    assert src["engine"] == "headless-playwright" and src["history"][0]["engine"] == "headless-playwright"
+    assert "headless-playwright" in run("status", ledger=ledger)[1]
+
+def test_order_json_includes_engine(ledger):
+    run("record", "edreams", "ok", "--results", "3", "--evidence", "x", "--engine", "claude-in-chrome", ledger=ledger)
+    use = json.loads(run("order", "--json", ledger=ledger)[1])["use"]
+    assert next(s for s in use if s["id"] == "edreams")["engine"] == "claude-in-chrome"
+
+def test_add_registers_new_source(ledger):
+    rc, _, err = run("record", "condor-direct", "ok", "--results", "3", "--evidence", "x", "--add",
+                     "--name", "Condor", "--role", "airline", "--family", "condor",
+                     "--url", "https://www.condor.com/", ledger=ledger)
+    assert rc == 0, err
+    src = json.loads(ledger.read_text())["sources"]["condor-direct"]
+    assert (src["name"], src["role"], src["family"], src["core"], src["state"]) == \
+        ("Condor", "airline", "condor", False, "ok")
+
+def test_add_requires_name_role_family(ledger):
+    assert run("record", "x-direct", "ok", "--results", "1", "--evidence", "x", "--add",
+               "--name", "X", "--role", "airline", ledger=ledger)[0] == 2
+
+def test_add_refuses_existing_id(ledger):
+    rc, _, err = run("record", "edreams", "ok", "--results", "1", "--evidence", "x", "--add",
+                     "--name", "E", "--role", "ota", "--family", "edreams", ledger=ledger)
+    assert rc == 2 and "already" in err
+
+def test_candidates_registered_untested(ledger):
+    run("status", ledger=ledger)
+    assert CANDIDATES <= set(json.loads(ledger.read_text())["sources"])
+    order = json.loads(run("order", "--json", ledger=ledger)[1])
+    unprobed = {"gotogate", "opodo", "ryanair-direct", "vueling-direct", "klm-direct",
+                "airfrance-direct", "british-airways-direct", "turkish-direct", "trainline"}
+    assert unprobed <= {u["id"] for u in order["untested"]}
+
+def test_candidate_families_and_roles(ledger):
+    run("status", ledger=ledger)
+    src = json.loads(ledger.read_text())["sources"]
+    assert src["opodo"]["family"] == "edreams" and src["momondo"]["family"] == "kayak"
+    assert src["sbb"]["role"] == "positioning" and src["flightconnections"]["role"] == "routes"
+
+def test_naive_timestamp_treated_as_utc(ledger):
+    run("status", ledger=ledger)
+    data = json.loads(ledger.read_text())
+    data["sources"]["edreams"]["checked_at"] = "2026-10-01T12:00:00"
+    ledger.write_text(json.dumps(data))
+    rc, _, err = run("status", ledger=ledger)
+    assert rc in (0, 3) and "Traceback" not in err
+
+
+def test_probe_seeds_carry_their_engine(ledger):
+    run("status", ledger=ledger)
+    src = json.loads(ledger.read_text())["sources"]
+    assert src["flightconnections"]["state"] == "ok" and src["flightconnections"]["engine"] == "headless-playwright"
+    assert src["swiss-direct"]["state"] == "blocked" and src["swiss-direct"]["engine"] == "headless-playwright"
+    assert src["swiss-direct"]["history"][0]["engine"] == "headless-playwright"
+    assert src["edreams"]["engine"] is None  # older seeds predate engine tracking
+
+
+def test_order_engine_allows_reprobe_of_lower_rung_blocks(ledger):
+    run("record", "kayak", "blocked", "--evidence", "x", "--engine", "headless-playwright", ledger=ledger)
+    plain = json.loads(run("order", "--json", ledger=ledger)[1])
+    assert "kayak" in [s["id"] for s in plain["avoid"]]
+    rung1 = json.loads(run("order", "--json", "--engine", "claude-in-chrome", ledger=ledger)[1])
+    assert "kayak" in [s["id"] for s in rung1["reprobe"]] and "kayak" not in [s["id"] for s in rung1["avoid"]]
+    same = json.loads(run("order", "--json", "--engine", "headless-playwright", ledger=ledger)[1])
+    assert "kayak" in [s["id"] for s in same["avoid"]]
