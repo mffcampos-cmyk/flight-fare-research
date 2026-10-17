@@ -15,9 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def project(tmp_path):
     repo = tmp_path / "repo with spaces"
-    shutil.copytree(ROOT / "scripts", repo / "scripts")
-    shutil.copytree(ROOT / "skill", repo / "skill")
-    shutil.copytree(ROOT / "integrations", repo / "integrations")
+    no_cache = shutil.ignore_patterns("__pycache__", "*.pyc")  # a stray cache on the dev machine is not the skill
+    shutil.copytree(ROOT / "scripts", repo / "scripts", ignore=no_cache)
+    shutil.copytree(ROOT / "skill", repo / "skill", ignore=no_cache)
+    shutil.copytree(ROOT / "integrations", repo / "integrations", ignore=no_cache)
     shutil.copy(ROOT / "CHANGELOG.md", repo / "CHANGELOG.md")
     return repo
 
