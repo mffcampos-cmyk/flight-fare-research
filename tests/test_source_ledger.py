@@ -14,6 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skill" / "scripts" / "source_ledger.py"
+sys.dont_write_bytecode = True  # never leave __pycache__ inside skill/
 CORE = ("google-flights", "flightlist", "edreams", "tap-direct", "ita-matrix")
 
 
@@ -196,3 +197,45 @@ def test_order_engine_allows_reprobe_of_lower_rung_blocks(ledger):
     assert "kayak" in [s["id"] for s in rung1["reprobe"]] and "kayak" not in [s["id"] for s in rung1["avoid"]]
     same = json.loads(run("order", "--json", "--engine", "headless-playwright", ledger=ledger)[1])
     assert "kayak" in [s["id"] for s in same["avoid"]]
+
+
+# 3.0: BrowserAct-first rungs, pacing per source, Asia candidates --------------------
+
+ASIA = {"qatar-direct", "emirates-direct", "turkish-direct", "singapore-direct", "thai-direct", "airasia-direct",
+        "scoot-direct", "trip-com", "google-explore"}
+
+
+def test_registry_has_asia_candidates_untested(ledger):
+    run("status", ledger=ledger)
+    src = json.loads(ledger.read_text())["sources"]
+    assert ASIA <= set(src)
+    assert src["google-explore"]["role"] == "discovery" and src["google-explore"]["family"] == "google"
+    assert src["singapore-direct"]["state"] is None and src["singapore-direct"]["role"] == "airline"
+    assert src["airasia-direct"]["family"] == "airasia"
+
+
+def test_new_rungs_browseract_stealth_first():
+    sys.path.insert(0, str(SCRIPT.parent))
+    import source_ledger
+    assert source_ledger.ENGINE_RUNG == {"browser-act-stealth": 1, "browser-act": 2, "browser-act-chrome": 3,
+                                         "claude-in-chrome": 3, "builtin-browser": 3, "cowork": 3}
+    assert source_ledger.engine_rung("headless-playwright") == 4
+    assert source_ledger.engine_rung("browser-act-stealth") == 1
+
+
+def test_order_marks_lower_rung_failures_as_reprobe_on_the_new_ladder(ledger):
+    run("record", "kayak", "blocked", "--evidence", "x", "--engine", "browser-act-stealth", ledger=ledger)
+    own = json.loads(run("order", "--json", "--engine", "claude-in-chrome", ledger=ledger)[1])
+    assert "kayak" in [s["id"] for s in own["avoid"]]  # rung 3 is below rung 1: no re-probe
+    run("record", "momondo", "blocked", "--evidence", "x", "--engine", "browser-act", ledger=ledger)
+    stealth = json.loads(run("order", "--json", "--engine", "browser-act-stealth", ledger=ledger)[1])
+    assert "momondo" in [s["id"] for s in stealth["reprobe"]] and "kayak" in [s["id"] for s in stealth["avoid"]]
+
+
+def test_order_json_carries_pace_and_sessions(ledger):
+    record_all_ok(ledger)
+    use = {s["id"]: s for s in json.loads(run("order", "--json", ledger=ledger)[1])["use"]}
+    assert (use["google-flights"]["pace_seconds"], use["google-flights"]["sessions_per_site"]) == (12, 1)
+    assert (use["flightlist"]["pace_seconds"], use["flightlist"]["sessions_per_site"]) == (8, 2)
+    text = run("order", ledger=ledger)[1]
+    assert "pace=12s sessions=1" in text
