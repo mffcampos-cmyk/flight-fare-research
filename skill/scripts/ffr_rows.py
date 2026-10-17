@@ -351,3 +351,296 @@ def row_status(row: dict, contract: dict, superseded: set[str], grounds: list[di
     if soft:
         return "lead", soft
     return "qualified", []
+
+
+# --------------------------------------------------------------------------- totals and flags
+
+def grounds_of(records: list[dict]) -> list[dict]:
+    return [r for r in records if r.get("type") == "ground"]
+
+
+def superseded_ids(records: list[dict]) -> set[str]:
+    return {r["supersedes"] for r in records if r.get("type") == "row" and r.get("supersedes")}
+
+
+def _sum_parts(row: dict, c: dict, grounds: list[dict]) -> float:
+    tickets = row.get("tickets") or []
+    fares = sum(t.get("price") or 0 for t in tickets)
+    if row.get("price_basis") == "per_person":
+        fares *= c["travelers"]["adults"] + len(c["travelers"]["children_ages"])
+    bags = 0.0
+    if c["bags"]["checked_per_person"] > 0:
+        bags = sum(t.get("bag_fee") or 0 for t in tickets if t.get("baggage") == "fee_required")
+    if c["bags"]["cabin_per_person"] > 0:
+        bags += sum(t.get("cabin_bag_fee") or 0 for t in tickets if t.get("cabin_bag") == "fee_required")
+    extras = sum(v for v in (row.get("components") or {}).values() if v is not None)
+    total = fares + bags + extras
+    if row.get("fx"):
+        total *= row["fx"]["rate"]
+    for chosen in ground_for(row, c, grounds).values():
+        total += sum(g["price"] for g in chosen if g)
+    return round(total, 2)
+
+
+def all_in(row: dict, contract: dict, grounds: list[dict]) -> float:
+    """All-in total in the contract currency (meaningful for qualified rows)."""
+    return _sum_parts(row, contract, grounds)
+
+
+def lower_bound(row: dict, contract: dict, grounds: list[dict]) -> float:
+    """Lowest possible all-in total: unknown parts count as 0. Never a price."""
+    return _sum_parts(row, contract, grounds)
+
+
+def risk_flags(row: dict, contract: dict, grounds: list[dict]) -> list[str]:
+    """Practicality flags shown beside a ranked option (not gates)."""
+    legs = row.get("legs") or []
+    components = row.get("components") or {}
+    flags = []
+    label = row.get("cabin_label") or ""
+    if "+" in label or "mixed" in label.lower():
+        flags.append(f"mixed cabin: {label}")
+    if any(d.get("airport_change") for d in legs):
+        flags.append("airport change")
+    if any(str(d.get("arr") or "")[:10] > str(d.get("dep") or "")[:10] for d in legs if d.get("arr") and d.get("dep")):
+        flags.append("next-day arrival")
+    if len(row.get("tickets") or []) > 1:
+        flags.append("separate tickets")
+    if any((d.get("stops") or 0) >= 2 for d in legs):
+        flags.append("2+ stops")
+    if any(d.get("self_transfer") for d in legs):
+        flags.append("self-transfer")
+    flags.extend(name for name in ("hotel", "transfers") if name in components)
+    prefer = set(contract["airlines"].get("prefer") or [])
+    if prefer and legs and all(set(d.get("airlines") or []) & prefer for d in legs):
+        flags.append("preferred airline")
+    dates = _row_dates_by_leg(row)
+    vias = via_airports(contract)
+    for code, chosen in ground_for(row, contract, grounds).items():
+        for g in chosen:
+            if g:
+                flags.append(f"ground: {vias[code].get('via') or 'ground'} {g['from']}-{g['to']}")
+                if g["date"] not in dates.values():
+                    flags.append("overnight before departure")
+    if contract.get("budget") is not None and _sum_parts(row, contract, grounds) > contract["budget"]:
+        flags.append("over budget")
+    return list(dict.fromkeys(flags))
+
+
+def _row_id_key(row_id: str):
+    return int(row_id[1:]) if row_id[1:].isdigit() else 0
+
+
+def _travel_key(row: dict) -> tuple[int, int]:
+    seconds, stops = [], 0
+    for d in row.get("legs") or []:
+        try:
+            seconds.append(duration_to_seconds(d.get("duration")))
+        except ValueError:
+            pass
+        stops += d.get("stops") or 0
+    return max(seconds, default=0), stops
+
+
+# --------------------------------------------------------------------------- evaluate and rank
+
+def evaluate(contract: dict, records: list[dict]) -> list[dict]:
+    """Status, totals, flags and ground choices for every fare row, in log order."""
+    superseded = superseded_ids(records)
+    grounds = grounds_of(records)
+    out = []
+    for r in records:
+        if r.get("type") != "row":
+            continue
+        status, reasons = row_status(r, contract, superseded, grounds)
+        priced = status in ("qualified", "lead")
+        out.append({"id": r["id"], "cabin": r.get("cabin"), "cell": row_cell_id(r, contract), "status": status,
+                    "reasons": reasons, "phase": r.get("phase", "exact"),
+                    "all_in": all_in(r, contract, grounds) if status == "qualified" else None,
+                    "lower_bound": lower_bound(r, contract, grounds) if priced else None,
+                    "flags": risk_flags(r, contract, grounds) if priced else [],
+                    "ground": {code: [g["id"] if g else None for g in chosen]
+                               for code, chosen in ground_for(r, contract, grounds).items()} if priced else {},
+                    "row": r})
+    return out
+
+
+def public_entry(entry: dict) -> dict:
+    """An evaluated entry without the raw row, for JSON output and reports."""
+    row = entry["row"]
+    tickets = row.get("tickets") or []
+    keys = ("leg", "part", "from", "to", "dep", "arr", "duration", "stops", "airlines", "airport_change", "self_transfer")
+    out = {k: v for k, v in entry.items() if k != "row"}
+    out.update({"source": row.get("source"), "family": row.get("family"), "url": row.get("url"),
+                "retrieved_at": row.get("retrieved_at"), "hack": row.get("hack"),
+                "origin": row.get("origin"), "destination": row.get("destination"), "dates": row.get("dates"),
+                "cabin_label": row.get("cabin_label"), "currency": row.get("currency"),
+                "providers": [t.get("provider") for t in tickets if t.get("provider")],
+                "legs": [{k: d.get(k) for k in keys} for d in row.get("legs") or [] if isinstance(d, dict)],
+                "booking_urls": [t.get("booking_url") for t in tickets if t.get("booking_url")],
+                "notes": row.get("notes")})
+    return out
+
+
+def _comparable(row: dict, contract: dict) -> bool:
+    return row.get("currency") == contract["currency"] or bool(row.get("fx"))
+
+
+def rank(contract: dict, records: list[dict], cabin: str | None = None) -> dict:
+    """Qualified options by all-in total, and leads with their pruning state, per cabin."""
+    evaluated = evaluate(contract, records)
+    cabins = [cabin] if cabin else list(contract["cabins"])
+    prefer = set(contract["airlines"].get("prefer") or [])
+    result = {}
+    for cab in cabins:
+        qualified = sorted((e for e in evaluated if e["cabin"] == cab and e["status"] == "qualified"),
+                           key=lambda e: (e["all_in"], "preferred airline" not in e["flags"] if prefer else 0,
+                                          *_travel_key(e["row"]), _row_id_key(e["id"])))
+        best = qualified[0]["all_in"] if qualified else None
+        leads = []
+        for e in evaluated:
+            if e["cabin"] != cab or e["status"] != "lead":
+                continue
+            comparable = _comparable(e["row"], contract)
+            currency = contract["currency"] if comparable else e["row"].get("currency")
+            leads.append(dict(e, comparable=comparable, currency=currency,
+                              pruned=comparable and best is not None and e["lower_bound"] >= best))
+        leads.sort(key=lambda e: (not e["comparable"], e["lower_bound"], _row_id_key(e["id"])))
+        result[cab] = {"best": best, "qualified": qualified, "leads": leads}
+    return result
+
+
+# --------------------------------------------------------------------------- completeness
+
+def _plural_families(n: int) -> str:
+    return f"{n} source family attempted" if n == 1 else f"{n} source families attempted"
+
+
+def cell_states(contract: dict, records: list[dict]) -> list[dict]:
+    """Open/done/resolved state of every expected comparison."""
+    from ffr_contract import build_cells, region_groups
+    cells = contract.get("cells") or build_cells(contract)
+    every = evaluate(contract, records)  # superseded rows still prove a family was searched
+    evaluated = [e for e in every if e["status"] != "superseded"]
+    ranked = rank(contract, records)
+    pruned = {lead["id"]: lead["pruned"] for v in ranked.values() for lead in v["leads"]}
+    resolutions = {}
+    for r in records:
+        if r.get("type") == "resolve":
+            resolutions[r["cell"]] = f"{r['as']}: {r['reason']}"
+    states = []
+    for cell in cells:
+        cab = cell["cabin"]
+        in_cell = [e for e in evaluated if e["cell"] == cell["id"]]
+        in_cabin = [e for e in evaluated if e["cabin"] == cab]
+        populated = [e for e in in_cell if e["status"] != "attempt"]
+        if cell["id"] in resolutions:
+            state, why = "resolved", resolutions[cell["id"]]
+        elif cell.get("auto"):
+            state, why = "resolved", f"{cell['auto']['as']}: {cell['auto']['reason']}"
+        elif cell["kind"] == "crosscheck":
+            n = len({e["row"].get("family") for e in every if e["cabin"] == cab})
+            state, why = ("done", "") if n >= 2 else ("open", _plural_families(n))
+            in_cell = in_cabin
+        elif cell["kind"] == "reprice":
+            ok = any(e["status"] == "qualified" for e in in_cabin)
+            state, why = ("done", "") if ok else ("open", "no qualified option")
+            in_cell = [e for e in in_cabin if e["status"] == "qualified"]
+        elif cell["kind"] == "confirm":
+            state, why = _confirm_state(cell, in_cell)
+        elif not in_cell:
+            state, why = "open", "not attempted"
+        elif not populated:
+            state, why = "open", "only blocked/empty/error attempts"
+        elif cell["kind"] in ("baseline", "discover") or any(e["status"] == "qualified" for e in populated):
+            state, why = "done", ""
+        else:
+            unresolved = [e["id"] for e in populated if e["status"] == "lead" and not pruned.get(e["id"])]
+            state, why = ("open", f"unresolved lead(s): {', '.join(unresolved)}") if unresolved else ("done", "")
+        states.append({"id": cell["id"], "kind": cell["kind"], "cabin": cab, "state": state,
+                       "why": why, "rows": len(in_cell)})
+    for i, side in region_groups(contract):
+        name = contract["legs"][i][side]["name"]
+        for cab in contract["cabins"]:
+            states.append({"id": f"{cab}/discover", "kind": "discover", "cabin": cab, "state": "open",
+                           "why": f"region '{name}' has no shortlist: run run_log.py shortlist", "rows": 0})
+    return states
+
+
+def _confirm_state(cell: dict, in_cell: list[dict]) -> tuple[str, str]:
+    if not cell.get("tuples"):
+        return "open", "no confirm tuples yet: run run_log.py confirm"
+    exact = {tuple(e["row"].get("dates") or []) for e in in_cell if e["status"] != "attempt" and e["phase"] == "exact"}
+    missing = [tuple_id(t) for t in cell["tuples"] if tuple(t) not in exact]
+    if missing:
+        return "open", "tuples without an exact-date result: " + ", ".join(missing)
+    return "done", ""
+
+
+def check(contract: dict, records: list[dict]) -> dict:
+    """Is the run complete? Lists open comparisons, closed-without-result cells and warnings."""
+    states = cell_states(contract, records)
+    warn = []
+    every = evaluate(contract, records)
+    cur = contract["currency"]
+    for cab, v in rank(contract, records).items():
+        for lead in v["leads"]:
+            if not lead["comparable"] and v["best"] is not None:
+                warn.append(f"{cab}: lead {lead['id']} is priced in {lead['currency']} without fx; "
+                            f"not comparable with best qualified ({v['best']:.2f} {cur})")
+        cheaper = [lead for lead in v["leads"] if lead["comparable"] and v["best"] is not None and not lead["pruned"]]
+        if cheaper:
+            shown = ", ".join(f"{lead['id']} LB {lead['lower_bound']:.2f}" for lead in cheaper[:3])
+            more = f" (+{len(cheaper) - 3} more)" if len(cheaper) > 3 else ""
+            noun = "lead" if len(cheaper) == 1 else "leads"
+            warn.append(f"{cab}: {len(cheaper)} {noun} may beat best qualified {v['best']:.2f} {cur}; "
+                        f"cheapest: {shown}{more}")
+        if v["best"] is None and v["leads"]:
+            warn.append(f"{cab}: no qualified option; {len(v['leads'])} lead(s) unverified")
+        families = sorted({e["row"].get("family") for e in every
+                           if e["cabin"] == cab and e["row"].get("outcome", "populated") == "populated"})
+        if not families:
+            warn.append(f"{cab}: no source family returned results")
+        elif len(families) == 1:
+            warn.append(f"{cab}: only one source family returned results ({families[0]})")
+    open_items = [{"cell": s["id"], "why": s["why"]} for s in states if s["state"] == "open"]
+    return {"complete": not open_items, "open": open_items,
+            "resolved": [{"cell": s["id"], "why": s["why"]} for s in states if s["state"] == "resolved"],
+            "warn": warn}
+
+
+def pick_confirm_tuples(contract: dict, records: list[dict], top: int = 3) -> dict[str, list[list[str]]]:
+    """Per cabin and destination, the cheapest `top` date tuples among discovery rows that pass the hard gates."""
+    picks: dict[str, list[list[str]]] = {}
+    best: dict[tuple, dict[tuple, float]] = {}
+    for e in evaluate(contract, records):
+        if e["phase"] != "discover" or e["status"] not in ("lead", "qualified") or e["row"].get("hack"):
+            continue
+        key = (e["cabin"], e["row"].get("destination"))
+        dates = tuple(e["row"].get("dates") or [])
+        price = e["lower_bound"]
+        if dates not in best.setdefault(key, {}) or price < best[key][dates]:
+            best[key][dates] = price
+    for (cab, dest), by_dates in best.items():
+        ordered = sorted(by_dates.items(), key=lambda kv: (kv[1], kv[0]))[:top]
+        picks[f"{cab}/{dest}"] = [list(d) for d, _ in ordered]
+    return picks
+
+
+def resolve_guard(cell: dict, kind: str, contract: dict, records: list[dict]) -> str | None:
+    """Why this resolution is not allowed, or None."""
+    rows = [e for e in evaluate(contract, records) if e["status"] != "superseded"]
+    if kind == "no_fare":
+        if cell["kind"] not in ("baseline", "hack", "discover", "confirm"):
+            return "no_fare closes a baseline, discover, confirm or hack comparison only"
+        searched = [e for e in rows if e["cell"] == cell["id"]
+                    and (e["status"] != "attempt" or e["row"].get("outcome") == "empty")]
+        if not searched:
+            return ("no_fare needs an executed search in this cell: add the empty or populated result first "
+                    "(blocked or error attempts are not a search)")
+    if kind == "none_qualify":
+        if cell["kind"] != "reprice":
+            return "none_qualify closes a cabin's reprice comparison only"
+        if not any(e["cabin"] == cell["cabin"] and e["status"] != "attempt" for e in rows):
+            return "none_qualify needs at least one priced candidate in this cabin"
+    return None
