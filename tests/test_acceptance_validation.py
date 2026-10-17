@@ -97,8 +97,8 @@ def test_broken_script_fails(project):
 
 def test_zip_drift_fails(project):
     assert run_script(project, "package.py").returncode == 0
-    for base in ("skill", "integrations/codex/.agents/skills/flight-fare-research",
-                 "integrations/claude-code/skills/flight-fare-research"):
+    for base in ("skill", "dist/codex/.agents/skills/flight-fare-research",
+                 "dist/claude-code/skills/flight-fare-research"):
         (project / base / "references/azair-browser.md").write_text("changed")
     result = run_script(project, "validate.py", "--strict")
     assert result.returncode == 1 and "zip" in result.stderr
@@ -110,7 +110,7 @@ def test_bytecode_is_never_packaged(project):
     assert run_script(project, "package.py").returncode == 0
     names = zipfile.ZipFile(project / "dist/flight-fare-research-cowork.zip").namelist()
     assert not any("__pycache__" in n for n in names)
-    assert not (project / "integrations/claude-code/skills/flight-fare-research/scripts/__pycache__").exists()
+    assert not (project / "dist/claude-code/skills/flight-fare-research/scripts/__pycache__").exists()
     assert run_script(project, "validate.py", "--strict").returncode == 0
 
 

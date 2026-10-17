@@ -8,7 +8,7 @@ Cowork uses the same skill as every other host, packaged as a zip.
 python3 scripts/package.py
 ```
 
-This refreshes the Codex and Claude Code copies and writes
+This builds every host package under `dist/`, including
 `dist/flight-fare-research-cowork.zip`. CI also builds it and publishes it as the
 `flight-fare-research-cowork` workflow artifact. The zip holds one top-level
 folder, `flight-fare-research/`, with `SKILL.md`, `references/` and `scripts/`.

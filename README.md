@@ -90,16 +90,17 @@ login-only features (stealth browsers, `stealth-extract`, `solve-captcha`,
 
 ## Install
 
-The canonical skill is `skill/`. Host packages are generated from it with
-`python3 scripts/package.py` and checked with `python3 scripts/validate.py --strict`.
+The canonical skill is `skill/`. Build the host packages once with
+`python3 scripts/package.py` (they land under `dist/`, which is never
+committed; CI publishes the same build as the `flight-fare-research-dist` and
+`flight-fare-research-cowork` artifacts).
 
-- **Claude Code:** `claude --plugin-dir integrations/claude-code`
-- **Codex:** `cd integrations/codex && codex` (or copy
-  `integrations/codex/.agents/skills/flight-fare-research/` into your project's
+- **Claude Code:** `claude --plugin-dir dist/claude-code`
+- **Codex:** `cd dist/codex && codex` (or copy
+  `dist/codex/.agents/skills/flight-fare-research/` into your project's
   `.agents/skills/`)
-- **Hermes:** `integrations/hermes/install.sh`
-- **Cowork:** run `python3 scripts/package.py` and upload
-  `dist/flight-fare-research-cowork.zip` (also published as a CI artifact). See
+- **Hermes:** `integrations/hermes/install.sh` (copies `skill/` directly)
+- **Cowork:** upload `dist/flight-fare-research-cowork.zip`. See
   `integrations/cowork/README.md`.
 
 ## Capability boundary
