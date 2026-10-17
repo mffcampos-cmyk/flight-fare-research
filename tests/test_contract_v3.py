@@ -169,11 +169,11 @@ def test_speed_default_follows_the_tuple_count():
     assert norm(c)["speed"] == "fast"
 
 
-def test_split_and_open_jaw_are_off_for_one_way():
+def test_requested_hacks_are_kept_for_one_way_so_init_can_mark_them_na():
     c = contract_v3(hacks={"split": True, "open_jaw": True, "stopover": False})
     c["legs"] = [leg("ZRH", "BKK", {"fixed": "2027-02-03"})]
     n = norm(c)
-    assert n["shape"] == "one_way" and n["hacks"]["split"] is False and n["hacks"]["open_jaw"] is False
+    assert n["shape"] == "one_way" and n["hacks"] == {"split": True, "open_jaw": True, "stopover": False}
 
 
 @pytest.mark.parametrize("field,value,fragment", [

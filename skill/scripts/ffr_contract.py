@@ -395,8 +395,6 @@ def normalize_contract(contract: dict) -> dict:
     hacks.update(c.get("hacks") or {})
     if c["scope"] == "quick":
         hacks = {h: False for h in HACKS}
-    if c["shape"] != "return":
-        hacks["split"] = hacks["open_jaw"] = False
     c["hacks"] = hacks
     c.setdefault("self_transfer_ok", False)
     c.setdefault("budget", None)
@@ -407,4 +405,100 @@ def normalize_contract(contract: dict) -> dict:
     c["bags"].setdefault("cabin_per_person", 0)
     if "speed" not in c:
         c["speed"] = _default_speed(len(expand_tuples(c)))
+    return c
+
+
+# --------------------------------------------------------------------------- cells
+
+def region_groups(contract: dict) -> list[tuple[int, str]]:
+    """(leg index, side) of every region group that still has no airports."""
+    out, seen = [], set()
+    for i, lg in enumerate(contract["legs"]):
+        for side in ("from", "to"):
+            g = lg[side]
+            if g.get("region") and not g["airports"] and g["name"] not in seen:
+                seen.add(g["name"])
+                out.append((i, side))
+    return out
+
+
+def tuple_id(dates: list[str]) -> str:
+    return "_".join(dates)
+
+
+def _hack_auto(contract: dict, hack: str):
+    if hack in ("split", "open_jaw") and contract["shape"] != "return":
+        return {"as": "na", "reason": "one-way trip" if contract["shape"] == "one_way" else "multi-city trip"}
+    if hack == "open_jaw":
+        first = contract["legs"][0]
+        if len(airports(first["from"])) < 2 and len(airports(first["to"])) < 2:
+            return {"as": "na", "reason": "no other airport to open the jaw"}
+    return None
+
+
+def build_cells(contract: dict) -> list[dict]:
+    """The comparisons a normalized run must finish, in report order."""
+    c = contract
+    first = c["legs"][0]
+    origins, destinations = airports(first["from"]), airports(first["to"])
+    cells = []
+    for cabin in c["cabins"]:
+        if c["speed"] == "thorough":
+            for origin in origins:
+                for dest in destinations:
+                    for dates in expand_tuples(c):
+                        cells.append({"id": f"{cabin}/baseline/{origin}-{dest}/{tuple_id(dates)}", "kind": "baseline",
+                                      "cabin": cabin, "origin": origin, "destination": dest, "dates": dates,
+                                      "auto": None})
+        else:
+            for dest in destinations:
+                cells.append({"id": f"{cabin}/discover/{dest}", "kind": "discover", "cabin": cabin,
+                              "destination": dest, "auto": None})
+            for dest in destinations:
+                cells.append({"id": f"{cabin}/confirm/{dest}", "kind": "confirm", "cabin": cabin,
+                              "destination": dest, "tuples": [], "auto": None})
+        for hack in HACKS:
+            if c["hacks"].get(hack):
+                cells.append({"id": f"{cabin}/hack/{hack}", "kind": "hack", "cabin": cabin, "hack": hack,
+                              "auto": _hack_auto(c, hack)})
+        cells.append({"id": f"{cabin}/crosscheck", "kind": "crosscheck", "cabin": cabin, "auto": None})
+        cells.append({"id": f"{cabin}/reprice", "kind": "reprice", "cabin": cabin, "auto": None})
+    return cells
+
+
+def apply_shortlist(contract: dict, codes: list[str]) -> dict:
+    """Add discovered gateway airports to every empty region group; rebuild tuples and cells."""
+    c = copy.deepcopy(contract)
+    bad = [code for code in codes if not isinstance(code, str) or not IATA.match(code)]
+    if bad:
+        raise ValueError(f"not three-letter uppercase airport codes: {', '.join(map(str, bad))}")
+    present = {a for lg in c["legs"] for side in ("from", "to") for a in airports(lg[side])}
+    dup = [code for code in codes if code in present]
+    if dup:
+        raise ValueError(f"already in the contract: {', '.join(dup)}")
+    targets = region_groups(c)
+    if not targets:
+        raise ValueError("no region group is waiting for a shortlist")
+    groups = [c["legs"][i][side] for i, side in targets]
+    names = {g["name"] for g in groups}
+    for lg in c["legs"]:
+        for side in ("from", "to"):
+            g = lg[side]
+            if g.get("region") and g["name"] in names:
+                g["airports"] = [{"code": code, "via": None, "overnight_ok": c["positioning"]["overnight_ok"]}
+                                 for code in codes]
+    c["date_tuples"] = expand_tuples(c)
+    c["cells"] = build_cells(c)
+    return c
+
+
+def fill_confirm_cells(contract: dict, picks: dict[str, list[list[str]]]) -> dict:
+    """Set the tuples to confirm on each `{cabin}/confirm/{DEST}` cell from picks[f"{cabin}/{DEST}"]."""
+    c = copy.deepcopy(contract)
+    by_id = {cell["id"]: cell for cell in c.get("cells") or []}
+    for key, tuples in picks.items():
+        cell = by_id.get(f"{key.split('/')[0]}/confirm/{key.split('/', 1)[1]}")
+        if not cell:
+            raise ValueError(f"no confirm cell for {key}")
+        cell["tuples"] = [list(t) for t in tuples]
     return c
