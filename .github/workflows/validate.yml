@@ -17,26 +17,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Gate the COMMITTED tree before packaging can regenerate/mask anything:
-      # strict mode also fails CI when any planned hand-authored artifact (Codex
+      # Strict mode also fails CI when a hand-authored host file (Codex
       # AGENTS.md, Claude plugin.json) is absent, instead of printing PENDING.
-      - name: Validate committed copies match canonical (strict)
+      - name: Validate the canonical skill (strict)
         run: python3 scripts/validate.py --strict
 
-      - name: Package generated skill copies
+      - name: Build host packages into dist/
         run: python3 scripts/package.py
 
-      # Guard against packaging drift: if package.py rewrites any committed
-      # generated copy, its git diff is non-empty and CI must fail so drift
-      # between canonical and the committed copies is never silently masked.
-      - name: Guard against packaging drift on committed copies
-        run: |
-          if ! git diff --exit-code --quiet -- skill integrations/; then
-            echo "::error::package.py modified committed generated copies; commit the generated copies alongside the canonical change instead of relying on CI to regenerate them"
-            git status --porcelain -- skill integrations/
-            exit 1
-          fi
-          echo "No packaging drift: generated copies committed and unchanged."
+      - name: Validate the built packages against the canonical skill
+        run: python3 scripts/validate.py --strict
 
       - name: Upload Cowork skill zip
         uses: actions/upload-artifact@v4
@@ -44,8 +34,14 @@ jobs:
           name: flight-fare-research-cowork
           path: dist/flight-fare-research-cowork.zip
 
+      - name: Upload host packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: flight-fare-research-dist
+          path: dist/
+
       - name: Install test dependencies
-        run: python3 -m pip install 'pytest>=8,<10'
+        run: python3 -m pip install -r requirements-dev.txt
 
       - name: Run static rule tests
         run: python3 -m pytest tests/ -v

@@ -110,3 +110,14 @@ Dated observations from one real run; reprice everything before relying on it.
 | Air France, KLM | Deep link prefilled the form; search API returned 403 silently. |
 | SWISS | Bot interstitial stayed: blocked. |
 | GOL | No flights offered from Lisbon on voegol.com.br; GOL/Wamos LIS–GIG sold via OTAs without a checked bag. |
+
+## Explore capture attempt (2026-10-17, headless Playwright Chromium, datacenter egress)
+
+`https://www.google.com/travel/explore?q=Flights%20from%20ZRH%20to%20Southeast%20Asia` loaded an
+empty "Where are you flying from?" shell; the flights `?q=` link with a region
+destination landed on the Google Flights home page; driving the Explore form
+(origin, then the region) got "Our systems have detected unusual traffic from
+your computer network" with a reCAPTCHA at 12:05Z. No Explore card text was
+captured; `gflights.py parse --explore` therefore reports only `challenge` or
+`unavailable` and the cards are read by hand (`discovery.md`). Rung 4
+evidence only: it says nothing about a stealth browser or the user's own.

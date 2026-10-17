@@ -24,6 +24,11 @@ Give a fresh general-purpose subagent this message, with the paths filled in:
 Score the reply against every Pass criterion. Record which criteria failed and
 quote the wording the agent used to justify the failure.
 
+Scenarios that need `browseract.py status` get its JSON in their Observations;
+when a scenario needs live-looking CLI output, put `tests/fake_browser_act.py`
+on the subagent's `PATH` as `browser-act` (see `tests/conftest.py`) and give each
+scenario its own `FFR_RUNS`, `FFR_LEDGER` and `FFR_STATE`.
+
 ## When to run
 
 - Before changing `SKILL.md` or a reference that the scenario touches (baseline).

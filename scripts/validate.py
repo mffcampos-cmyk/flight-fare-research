@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate generated host skill copies against the canonical skill."""
+"""Validate the canonical skill and, when built, the host packages under dist/."""
 
 from __future__ import annotations
 
@@ -17,9 +17,11 @@ from _hash import sha256_file
 ROOT = Path(__file__).resolve().parent.parent
 CANONICAL_SKILL = ROOT / "skill"
 GENERATED_TARGETS = (
-    ROOT / "integrations" / "codex" / ".agents" / "skills" / "flight-fare-research",
-    ROOT / "integrations" / "claude-code" / "skills" / "flight-fare-research",
+    ROOT / "dist" / "codex" / ".agents" / "skills" / "flight-fare-research",
+    ROOT / "dist" / "claude-code" / "skills" / "flight-fare-research",
 )
+SKILL_NAME = "flight-fare-research"
+LIBRARY_PREFIX = "ffr_"  # importable modules under skill/scripts, not commands
 SKILL_BODY_WORD_LIMIT = 2000
 COWORK_ZIP = ROOT / "dist" / "flight-fare-research-cowork.zip"
 PLUGIN_JSON = ROOT / "integrations" / "claude-code" / ".claude-plugin" / "plugin.json"
@@ -140,6 +142,8 @@ def validate_scripts(skill_root):
     errors = []
     for script in sorted((skill_root / "scripts").glob("*.py")):
         name = script.name
+        if name.startswith(LIBRARY_PREFIX):
+            continue
         try:
             compile(script.read_text(encoding="utf-8"), str(script), "exec")
         except SyntaxError as exc:
@@ -213,8 +217,9 @@ def file_map(directory):
 
 
 def validate_target(canonical, target):
+    """A built dist/ tree must match the canonical skill; an unbuilt one is fine."""
     if not target.is_dir():
-        return ["missing generated target: %s" % target]
+        return []
 
     actual = file_map(target)
     errors = []
@@ -261,7 +266,7 @@ def main():
         frontmatter, fm_errors = parse_frontmatter(first_delimited_block(skill_md))
         errors.extend(fm_errors)
         if not fm_errors:
-            expected_name = GENERATED_TARGETS[0].name
+            expected_name = SKILL_NAME
             if "name" not in frontmatter:
                 errors.append("SKILL.md frontmatter: missing required key: name")
             elif frontmatter["name"] != expected_name:

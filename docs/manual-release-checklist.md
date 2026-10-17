@@ -2,10 +2,9 @@
 
 1. Bump the version in `skill/SKILL.md`, `integrations/claude-code/.claude-plugin/plugin.json`
    and the top `CHANGELOG.md` heading together (`validate.py` checks they agree).
-2. Run `python3 scripts/package.py`; commit the regenerated copies; require no
-   drift (`git diff --exit-code -- skill integrations`).
-3. Run `python3 scripts/validate.py --strict` (copies, links, versions, scripts,
-   `SKILL.md` word budget, Cowork zip).
+2. Run `python3 scripts/package.py` to build `dist/` (never committed).
+3. Run `python3 scripts/validate.py --strict` (links, versions, scripts,
+   `SKILL.md` word budget, and the built `dist/` packages).
 4. Run `python3 -m pytest tests/ -q`.
 5. Re-run the pressure scenarios in `tests/scenarios/` against the release
    candidate and record the results in each file.

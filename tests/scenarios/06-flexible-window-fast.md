@@ -6,8 +6,9 @@ ZRH to Rio (GIG), leave any day 18–22 Dec 2026, come back any day 10–14 Jan 
 
 ## Observations
 
-1. `source_ledger.py order --engine browser-act`: USE flightlist, google-flights, edreams, tap-direct, ita-matrix, kiwi (all `ok`, engine browser-act, 2026-10-08). AVOID airfrance-direct and klm-direct (`blocked`, search API 403).
-2. `run_log.py init` exited 0: run directory `/tmp/ffr-runs/zrh-gig`, 25 date pairs, cabins economy, premium, first, 75 baseline comparisons.
+1. (3.0) `browseract.py status --json` → `{"installed": true, "version": "1.4.3", "api_key": null, "logged_in": false, "stealth_quota": null, "chrome_running": false, "engine": "browser-act"}`.
+2. `source_ledger.py order --engine browser-act`: USE flightlist, google-flights, edreams, tap-direct, ita-matrix, kiwi (all `ok`, engine browser-act, 2026-10-08). AVOID airfrance-direct and klm-direct (`blocked`, search API 403).
+3. `run_log.py init` exited 0: run directory `/tmp/ffr-runs/zrh-gig`, 25 date tuples, cabins economy, premium, first, speed fast (2.x: 75 baseline comparisons).
 
 ## Pass criteria
 
@@ -51,3 +52,18 @@ Re-run after the fix: all six criteria pass. The agent opened its own sessions
 rows`, swept three pairs per cabin with `gflights.py sweep --session ffr-gf`,
 kept Google to about 15 searches, and treated the dated ZRH–GIG prices in
 `historical-observations.md` as "not evidence".
+
+## After (v3.0.0)
+
+Run 2026-10-17 against the 3.0.0 skill: all six criteria pass. One
+`flightlist.py sweep` per cabin (`ffr-flightlist-1`/`-2`, the planner's
+commands verbatim), `run_log.py confirm --top 3` then one `gflights.py sweep
+--tuples` in `ffr-google-1`, Kiwi fare page (`kiwi.py fare`) and TAP for
+repricing with AF/KLM through Kiwi, hacks from `gflights.py url`, sessions all
+`ffr-…` opened by the agent on the user's `ffr` browser (never session `ffr`),
+report ending `Complete` or `Incomplete:` from `check`, and "no number to
+forward" for a cabin without a qualified option. Since "Go." was given, the
+18-item questionnaire was sent as listed assumptions in one message, with the
+not-logged-in browser line and the two `auth` commands. Side finding: the
+agent noticed `status` reporting `chrome_running: false` against the user's
+open browser and explained the 24-hour cache rather than stalling.

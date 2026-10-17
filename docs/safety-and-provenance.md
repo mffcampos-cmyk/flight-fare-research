@@ -7,24 +7,36 @@ This document states the boundary and the evidence rules; the skill
 
 ## Browsers and challenges
 
-- **Engine ladder.** Prefer the user's own browser (Claude in Chrome, the Claude
-  desktop built-in browser, Cowork's browser), then a persistent browser-act
-  browser, then a headless browser. Record the engine with every source state.
-- **Pace like a person.** One search at a time on each site with pauses between
-  searches (different sites may run in parallel sessions), deep links over
-  refilled forms, optional cookies declined once per site and the session kept.
-  Speed comes from fewer searches (one FlightList range search for a flexible
-  window) and from reading the page's own ready signal, never from evading a
-  site's limits.
+- **Engine ladder.** BrowserAct first: a hosted stealth browser
+  (`browser-act-stealth`, needs the free BrowserAct login), then BrowserAct's
+  local Chromium (`browser-act`), then the user's own browser (`chrome-direct`,
+  Claude in Chrome, the desktop built-in browser, Cowork's browser), then a
+  host headless tool. `browseract.py status` finds the highest rung each
+  session and, when no login exists, tells the user how to create the free
+  account; the agent never creates it and never pastes a key into chat.
+  Record the engine with every source state and every row.
+- **BrowserAct's free features are the user's own configured tooling.** The
+  skill uses stealth browsers, parallel sessions, `solve-captcha`,
+  `stealth-extract` and `remote-assist` as the installed CLI offers them. It
+  does not buy proxies or browsers (any `purchase_url` or `renewal_url` flow
+  goes to the user), does not import anyone else's sessions, and does not use
+  private or reverse-engineered APIs. Automated access can be against a
+  site's terms: the user runs the skill on their own account and
+  responsibility, and the report names every site that challenged the run.
+- **Pace like a person, work in parallel.** Every source family runs in its
+  own session at once; on one site, the ledger's `sessions_per_site` and
+  `pace_seconds`; deep links over refilled forms; optional cookies declined
+  once per site and the session kept; Google's daily allowance spent on
+  confirmation, not discovery. Speed comes from parallel sessions and fewer,
+  wider searches (one FlightList range search per destination), never from
+  hammering a site.
 - **Challenges.** On a CAPTCHA, press-and-hold check, "unusual traffic" page,
-  bot page or HTTP 403/429, stop that site for the run. A user watching their
-  own browser may complete the check themselves; otherwise record the source as
-  blocked (with the engine) and move on.
-- **Never:** automated CAPTCHA solving, proxy or TLS rotation, stealth or
-  fingerprint changes, imported cookies or sessions, or private and
-  reverse-engineered APIs, even when the user asks. A site's controls are the
-  site's to waive, and a fare reached by evading them is not evidence anyone
-  could book.
+  bot page or HTTP 403/429 in the network log: with a login, `solve-captcha`
+  once, then `remote-assist` when a human is reachable (the link goes to the
+  user, the agent continues in the same session); a user watching their own
+  browser may clear it; otherwise the source is recorded as blocked (with the
+  engine and the outcome) and the run moves on. A site that stayed blocked is
+  never retried in the same run.
 - **Consent banners** are normal interaction: decline optional cookies.
 
 ## Lead or qualified
@@ -33,9 +45,9 @@ This document states the boundary and the evidence rules; the skill
 
 | Status | Meaning |
 |---|---|
-| `qualified` | Both directions selected, each within the journey-time limit, baggage resolved for the requested bags, every all-in part priced, repriced on the seller's page, currency comparable |
-| `lead` | Passes the hard gates but has open items, listed as reasons (for example `baggage unverified`, `positioning unpriced`, `list fare not repriced`) |
-| `rejected` | Fails a hard gate: over the duration cap, a forbidden self-transfer, wrong cabin, dates or airports, positioning not allowed |
+| `qualified` | Every leg selected, each within the journey-time limit and the stop, time-window and airline gates, baggage resolved for the requested bags, every all-in part priced (ground rows for nearby airports), repriced on the seller's page, currency comparable |
+| `lead` | Passes the hard gates but has open items, listed as reasons (for example `baggage unverified`, `ground unpriced (BSL)`, `list fare not repriced`, `leg 2 not selected`) |
+| `rejected` | Fails a hard gate: over the duration cap, too many stops, outside a time window, an excluded airline, a forbidden self-transfer, wrong cabin, dates or airports, an overnight ground leg where none is allowed |
 | `superseded` | Replaced by a later reprice; kept as a stale observation |
 | `attempt` | A blocked, empty or broken page; no price |
 
@@ -63,8 +75,8 @@ Airline norms, cabin expectations and generic policy pages never make a bag
 
 ## No booking, payment or secrets
 
-- Stop before passenger details. Never enter card numbers, create accounts or
-  complete checkout.
+- Stop before passenger details. Never enter card numbers, create accounts
+  (the BrowserAct account included) or complete checkout.
 - Never ask for, accept or print credentials in chat; check only whether one is
   configured in the environment or secret store.
 - The repository must not hold passwords, session tokens, booking tokens or
@@ -91,5 +103,5 @@ blocked page or an indexed deal snippet is never fare evidence.
 
 - `docs/manual-release-checklist.md`
 - `skill/references/browser-engines.md`, `skill/references/qualification.md`,
-  `skill/references/source-ladder.md`
+  `skill/references/discovery.md`, `skill/references/source-ladder.md`
 - `skill/references/historical-observations.md` for dated source status

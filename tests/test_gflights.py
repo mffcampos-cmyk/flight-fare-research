@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.run_log_helpers import ROOT, contract, cli, write_json
+from tests.run_log_helpers import ROOT, contract_v3, leg, group, cli, write_json
 
 sys.path.insert(0, str(ROOT / "skill" / "scripts"))
 import gflights  # noqa: E402
@@ -130,27 +130,37 @@ def test_parse_page_states(text, state):
 # sweep (browser injected) -----------------------------------------------------------
 
 class FakePage:
-    """Stands in for the browser: each open() serves the next queued page texts in order."""
+    """Stands in for a browseract.Session: each navigate() serves the next queued page texts in order."""
 
     def __init__(self, *texts_per_search):
         self.queue = [list(t) for t in texts_per_search]
         self.opened = []
         self.current = []
+        self.name = "ffr-google-1"
 
-    def open(self, url):
+    def navigate(self, url):
         self.opened.append(url)
         self.current = self.queue.pop(0)
 
-    def read(self):
+    def read_markdown(self):
         return self.current.pop(0) if len(self.current) > 1 else self.current[0]
+
+
+def premium_contract(run_id="g1", **over):
+    c = contract_v3(run_id=run_id, **dict({"cabins": ["premium"]}, **over))
+    c["legs"] = [leg("ZRH", "GIG", {"fixed": "2026-12-22"}), leg("to:1", "from:1", {"fixed": "2027-01-12"})]
+    return c
+
+
+def make_run(tmp_path, c):
+    r = cli("init", "--contract", write_json(tmp_path / f"{c['run_id']}.json", c), "--runs-root", tmp_path / "runs")
+    assert r.returncode == 0, r.stderr
+    return tmp_path / "runs" / c["run_id"]
 
 
 @pytest.fixture
 def run(tmp_path):
-    c = contract(run_id="g1", origins=["ZRH"], destinations=["GIG"], cabins=["premium"],
-                 dates={"pairs": [["2026-12-22", "2027-01-12"]]})
-    assert cli("init", "--contract", write_json(tmp_path / "c.json", c), "--runs-root", tmp_path / "runs").returncode == 0
-    return tmp_path / "runs" / "g1"
+    return make_run(tmp_path, premium_contract())
 
 
 def saved(run):
@@ -161,6 +171,20 @@ def no_sleep(_seconds):
     pass
 
 
+def test_legs_for_tuple_return_and_multicity():
+    import ffr_contract
+    c = ffr_contract.normalize_contract(premium_contract())
+    assert gflights.legs_for_tuple(c, ["2026-12-22", "2027-01-12"]) == ["ZRH-GIG@2026-12-22", "GIG-ZRH@2027-01-12"]
+    assert gflights.legs_for_tuple(c, ["2026-12-22", "2027-01-12"], origin="BSL") == ["BSL-GIG@2026-12-22", "GIG-BSL@2027-01-12"]
+    m = contract_v3(); m["legs"] = [leg("ZRH", "BKK", {"fixed": "2027-02-03"}), leg("BKK", "SIN", {"fixed": "2027-02-10"}),
+                                    leg("SIN", "ZRH", {"fixed": "2027-02-17"})]
+    m = ffr_contract.normalize_contract(m)
+    assert gflights.legs_for_tuple(m, ["2027-02-03", "2027-02-10", "2027-02-17"]) == \
+        ["ZRH-BKK@2027-02-03", "BKK-SIN@2027-02-10", "SIN-ZRH@2027-02-17"]
+    one = contract_v3(); one["legs"] = [leg(group("ZRH", "BSL"), "BKK", {"fixed": "2027-02-03"})]
+    assert gflights.legs_for_tuple(ffr_contract.normalize_contract(one), ["2027-02-03"]) == ["ZRH-BKK@2027-02-03"]
+
+
 def test_sweep_records_the_cheapest_cards_as_list_leads(run):
     fake = FakePage([page("roundtrip_premium")])
     summary = gflights.sweep(str(run), fake, cabins=["premium"], sleep=no_sleep)
@@ -168,8 +192,10 @@ def test_sweep_records_the_cheapest_cards_as_list_leads(run):
     assert summary["searches"] == 1 and summary["stopped"] is None
     assert [r["tickets"][0]["price"] for r in rows] == [2275.0, 2324.0, 2324.0, 2427.0]
     assert {r["tickets"][0]["quote_state"] for r in rows} == {"list"}
-    assert [len(r["directions"]) for r in rows] == [1, 1, 1, 1]
+    assert all(r["dates"] == ["2026-12-22", "2027-01-12"] and r["phase"] == "exact" for r in rows)
+    assert [[(l["leg"], l["part"]) for l in r["legs"]] for r in rows] == [[(1, 1)]] * 4
     assert rows[1]["cabin_label"] == "Economy + Premium Economy" and rows[1]["url"] == fake.opened[0]
+    assert rows[1]["legs"][0]["from"] == "ZRH" and rows[1]["legs"][0]["to"] == "GIG"
     rank = json.loads(cli("rank", "--run", run, "--json").stdout)["premium"]["leads"]
     assert [lead["id"] for lead in rank] == ["r2", "r3", "r4"]  # r1 is over the 20h cap: rejected
 
@@ -180,25 +206,54 @@ def test_sweep_waits_for_results_before_reading(run):
     assert len(saved(run)) == 4
 
 
-def test_sweep_stops_at_the_first_challenge(tmp_path):
-    c = contract(run_id="g2", origins=["ZRH"], destinations=["GIG"], cabins=["premium"],
-                 dates={"pairs": [["2026-12-22", "2027-01-12"], ["2026-12-22", "2027-01-13"]]})
-    cli("init", "--contract", write_json(tmp_path / "c.json", c), "--runs-root", tmp_path / "runs")
-    run = tmp_path / "runs" / "g2"
+def test_sweep_stops_at_the_first_challenge_when_nothing_clears_it(tmp_path):
+    c = premium_contract("g2"); c["legs"][1]["dates"] = {"after_leg": {"leg": 1, "min_days": 21, "max_days": 22}}
+    run = make_run(tmp_path, c)
     fake = FakePage([CHALLENGE], [page("roundtrip_premium")])
-    summary = gflights.sweep(str(run), fake, cabins=["premium"], sleep=no_sleep)
-    assert summary["stopped"] == "challenge" and len(fake.opened) == 1
+    outcomes = []
+    summary = gflights.sweep(str(run), fake, cabins=["premium"], sleep=no_sleep,
+                             on_challenge=lambda session: outcomes.append(session.name) or "blocked")
+    assert summary["stopped"] == "challenge" and len(fake.opened) == 1 and outcomes == ["ffr-google-1"]
     assert [r["outcome"] for r in saved(run)] == ["blocked"]
 
 
+def test_sweep_continues_after_a_cleared_challenge(run):
+    fake = FakePage([CHALLENGE, page("roundtrip_premium")])
+    summary = gflights.sweep(str(run), fake, cabins=["premium"], sleep=no_sleep, on_challenge=lambda session: "solved")
+    assert summary["stopped"] is None and summary["challenges"] == 1
+    rows = saved(run)
+    assert len(rows) == 4 and "challenge solved" in rows[0]["notes"]
+
+
 def test_sweep_records_an_error_when_the_page_shows_another_search(tmp_path):
-    c = contract(run_id="g3", origins=["ZRH"], destinations=["GIG"], cabins=["premium"],
-                 dates={"pairs": [["2026-12-21", "2027-01-12"]]})
-    cli("init", "--contract", write_json(tmp_path / "c.json", c), "--runs-root", tmp_path / "runs")
-    run = tmp_path / "runs" / "g3"
+    c = premium_contract("g3"); c["legs"][0]["dates"] = {"fixed": "2026-12-21"}
+    run = make_run(tmp_path, c)
     gflights.sweep(str(run), FakePage([page("roundtrip_premium")]), cabins=["premium"], sleep=no_sleep)
     rows = saved(run)
     assert [r["outcome"] for r in rows] == ["error"] and "2026-12-22" in rows[0]["notes"]
+
+
+def test_sweep_filters_tuples(tmp_path):
+    c = premium_contract("g4"); c["legs"][1]["dates"] = {"after_leg": {"leg": 1, "min_days": 21, "max_days": 22}}
+    run = make_run(tmp_path, c)
+    fake = FakePage([page("roundtrip_premium")])
+    summary = gflights.sweep(str(run), fake, cabins=["premium"], tuples=["2026-12-22_2027-01-12"], sleep=no_sleep)
+    assert summary["searches"] == 1 and len(fake.opened) == 1
+
+
+# explore -------------------------------------------------------------------------------
+
+def test_explore_url_and_steps():
+    url = gflights.explore_url("Southeast Asia", "ZRH", ("2027-02-01", "2027-02-10"), "economy", "CHF")
+    assert url.startswith("https://www.google.com/travel/explore?") and "curr=CHF" in url and "hl=en" in url
+    steps = gflights.explore_steps("Southeast Asia", "ZRH", ("2027-02-01", "2027-02-10"))
+    assert any("ZRH" in s for s in steps) and any("Southeast Asia" in s for s in steps)
+
+
+def test_parse_explore_reports_challenge_or_unavailable():
+    assert gflights.parse(CHALLENGE, "2027-02-01", explore=True)["state"] == "challenge"
+    out = gflights.parse("Explore\nWhere are you flying from?\n", "2027-02-01", explore=True)
+    assert out["state"] == "unavailable" and out["destinations"] == []
 
 
 # command line -----------------------------------------------------------------------
@@ -223,3 +278,23 @@ def test_cli_sweep_needs_a_session_the_agent_opened(tmp_path):
     # no default session name: an agent must not drive the user's session by accident
     r = subprocess.run([sys.executable, "-B", str(GF), "sweep", "--run", str(tmp_path)], capture_output=True, text=True)
     assert r.returncode == 2 and "--session" in r.stderr
+    r = subprocess.run([sys.executable, "-B", str(GF), "sweep", "--run", str(tmp_path), "--session", "ffr"],
+                       capture_output=True, text=True)
+    assert r.returncode == 2 and "ffr-" in r.stderr
+
+
+def test_cli_explore_prints_url_and_steps():
+    r = subprocess.run([sys.executable, "-B", str(GF), "explore", "--region", "Southeast Asia", "--from", "ZRH",
+                        "--window", "2027-02-01,2027-02-10"], capture_output=True, text=True)
+    assert r.returncode == 0 and "travel/explore" in r.stdout and "Southeast Asia" in r.stdout
+
+
+def test_sweep_with_several_origins_takes_each_row_origin_from_the_card(tmp_path):
+    c = premium_contract("g5", cabins=["economy"])  # the multi-airport page is an economy search
+    c["legs"][0]["from"] = group("ZRH", *({"code": x, "via": "rail"} for x in ("BSL", "GVA", "MXP", "MUC", "FRA")))
+    run = make_run(tmp_path, c)
+    fake = FakePage([page("multiairport")])
+    summary = gflights.sweep(str(run), fake, cabins=["economy"], origin="BSL+GVA+MXP+MUC+FRA", sleep=no_sleep)
+    rows = saved(run)
+    assert summary["rows"] >= 2 and {r["origin"] for r in rows} >= {"MUC", "GVA"}
+    assert all(r["legs"][0]["from"] == r["origin"] for r in rows)

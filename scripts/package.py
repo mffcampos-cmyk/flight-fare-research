@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Copy the canonical skill into each host integration and build the Cowork zip."""
+"""Build the host packages under dist/ from the canonical skill.
+
+dist/claude-code/   Claude Code plugin (plugin.json + skills/flight-fare-research)
+dist/codex/         Codex project (AGENTS.md + .agents/skills/flight-fare-research)
+dist/flight-fare-research-cowork.zip   Cowork upload
+"""
 
 from __future__ import annotations
 
@@ -10,11 +15,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CANONICAL_SKILL = ROOT / "skill"
+DIST = ROOT / "dist"
 DESTINATIONS = (
-    ROOT / "integrations" / "codex" / ".agents" / "skills" / "flight-fare-research",
-    ROOT / "integrations" / "claude-code" / "skills" / "flight-fare-research",
+    DIST / "codex" / ".agents" / "skills" / "flight-fare-research",
+    DIST / "claude-code" / "skills" / "flight-fare-research",
 )
-COWORK_ZIP = ROOT / "dist" / "flight-fare-research-cowork.zip"
+# Hand-authored host files copied beside the generated skill trees.
+HAND_AUTHORED = (
+    (ROOT / "integrations" / "codex" / "AGENTS.md", DIST / "codex" / "AGENTS.md"),
+    (ROOT / "integrations" / "claude-code" / ".claude-plugin" / "plugin.json",
+     DIST / "claude-code" / ".claude-plugin" / "plugin.json"),
+)
+COWORK_ZIP = DIST / "flight-fare-research-cowork.zip"
 SKILL_NAME = "flight-fare-research"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
@@ -60,15 +72,16 @@ def main() -> int:
             return 1
 
         source_count = file_count(CANONICAL_SKILL)
+        for host_dir in {d.parent if d.name == "skills" else d.parents[2] for d in DESTINATIONS}:
+            if host_dir.exists():
+                shutil.rmtree(host_dir)
         for destination in DESTINATIONS:
-            if destination.exists() or destination.is_symlink():
-                if destination.is_dir() and not destination.is_symlink():
-                    shutil.rmtree(destination)
-                else:
-                    destination.unlink()
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(CANONICAL_SKILL, destination, ignore=IGNORE)
             print(f"Copied {source_count} file(s): {CANONICAL_SKILL} -> {destination}")
+        for source, target in HAND_AUTHORED:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
         build_cowork_zip(CANONICAL_SKILL, COWORK_ZIP)
         print(f"Built Cowork zip: {COWORK_ZIP}")
     except (OSError, shutil.Error, zipfile.BadZipFile) as error:

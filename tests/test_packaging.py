@@ -15,9 +15,10 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def project(tmp_path):
     repo = tmp_path / "repo with spaces"
-    shutil.copytree(ROOT / "scripts", repo / "scripts")
-    shutil.copytree(ROOT / "skill", repo / "skill")
-    shutil.copytree(ROOT / "integrations", repo / "integrations")
+    no_cache = shutil.ignore_patterns("__pycache__", "*.pyc")  # a stray cache on the dev machine is not the skill
+    shutil.copytree(ROOT / "scripts", repo / "scripts", ignore=no_cache)
+    shutil.copytree(ROOT / "skill", repo / "skill", ignore=no_cache)
+    shutil.copytree(ROOT / "integrations", repo / "integrations", ignore=no_cache)
     shutil.copy(ROOT / "CHANGELOG.md", repo / "CHANGELOG.md")
     return repo
 
@@ -30,53 +31,53 @@ def run_script(project, name, *args):
 
 
 @pytest.mark.parametrize("script", ["package.py", "validate.py"])
-def test_missing_skill_entrypoint_fails_without_changing_copies(project, script):
+def test_missing_skill_entrypoint_fails(project, script):
     (project / "skill/SKILL.md").unlink()
-    target = project / "integrations/claude-code/skills/flight-fare-research/SKILL.md"
-    before = target.read_bytes()
     result = run_script(project, script)
     assert result.returncode != 0
     assert "SKILL.md" in result.stderr
-    assert target.read_bytes() == before
-
-
-def test_validator_rejects_matching_trees_without_skill_entrypoint(project):
-    for entrypoint in project.rglob("SKILL.md"):
-        entrypoint.unlink()
-    result = run_script(project, "validate.py", "--strict")
-    assert result.returncode != 0
-    assert "SKILL.md" in result.stderr
+    assert not (project / "dist").exists()
 
 
 def tree_bytes(path):
     return {p.relative_to(path): p.read_bytes() for p in path.rglob("*") if p.is_file()}
 
 
+CLAUDE_SKILL = "dist/claude-code/skills/flight-fare-research"
+CODEX_SKILL = "dist/codex/.agents/skills/flight-fare-research"
+
+
+def test_package_builds_dist_trees_and_zip(project):
+    result = run_script(project, "package.py")
+    assert result.returncode == 0, result.stderr
+    assert (project / "dist/claude-code/.claude-plugin/plugin.json").is_file()
+    assert (project / CLAUDE_SKILL / "SKILL.md").is_file()
+    assert (project / "dist/codex/AGENTS.md").is_file()
+    assert (project / CODEX_SKILL / "scripts/run_log.py").is_file()
+    assert tree_bytes(project / CLAUDE_SKILL) == tree_bytes(project / "skill")
+    assert tree_bytes(project / CODEX_SKILL) == tree_bytes(project / "skill")
+    names = zipfile.ZipFile(project / "dist/flight-fare-research-cowork.zip").namelist()
+    assert names and all(n.startswith("flight-fare-research/") for n in names)
+
+
 def test_package_is_repeatable_and_removes_stale_files(project):
-    target = project / "integrations/claude-code/skills/flight-fare-research"
-    (target / "stale.txt").write_text("stale")
-    for _ in range(2):
-        result = run_script(project, "package.py")
-        assert result.returncode == 0, result.stderr
-        assert tree_bytes(target) == tree_bytes(project / "skill")
-        result = run_script(project, "validate.py", "--strict")
-        assert result.returncode == 0, result.stderr
+    assert run_script(project, "package.py").returncode == 0
+    stale = project / CLAUDE_SKILL / "stale.txt"
+    stale.write_text("stale")
+    result = run_script(project, "package.py")
+    assert result.returncode == 0, result.stderr
+    assert not stale.exists()
+    assert run_script(project, "validate.py", "--strict").returncode == 0
 
 
-@pytest.mark.parametrize("mutation,diagnostic", [
-    ("missing", "missing file"), ("extra", "extra file"), ("changed", "SHA-256 mismatch"),
-])
-def test_validator_reports_copy_drift(project, mutation, diagnostic):
-    target = project / "integrations/claude-code/skills/flight-fare-research"
-    if mutation == "missing":
-        (target / "SKILL.md").unlink()
-    elif mutation == "extra":
-        (target / "extra.txt").write_text("extra")
-    else:
-        (target / "SKILL.md").write_text("changed")
+def test_validate_passes_without_dist_and_fails_on_stale_dist(project):
     result = run_script(project, "validate.py", "--strict")
-    assert result.returncode == 1
-    assert diagnostic in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert run_script(project, "package.py").returncode == 0
+    (project / "skill/references/intake.md").write_text("changed\n")
+    result = run_script(project, "validate.py", "--strict")
+    assert result.returncode != 0
+    assert "dist" in result.stderr
 
 
 def test_strict_validation_requires_hand_authored_artifacts(project):
@@ -84,6 +85,12 @@ def test_strict_validation_requires_hand_authored_artifacts(project):
     result = run_script(project, "validate.py", "--strict")
     assert result.returncode == 1
     assert "hand-authored artifact is missing" in result.stderr
+
+
+def test_library_modules_are_not_run_with_help(project):
+    (project / "skill/scripts/ffr_lib.py").write_text("X = 1\n")
+    result = run_script(project, "validate.py", "--strict")
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize("override", [False, True])
@@ -126,11 +133,16 @@ def test_package_builds_deterministic_cowork_zip(project):
     assert {n.split("/", 1)[1] for n in names} == {str(p) for p in tree_bytes(project / "skill")}
 
 
-def test_ci_installs_pinned_pytest_and_uploads_zip():
+def test_ci_installs_dev_requirements_and_uploads_dist():
     workflow = (ROOT / ".github/workflows/validate.yml").read_text()
-    assert "python3 -m pip install 'pytest>=8,<10'" in workflow
-    assert workflow.index("pip install 'pytest") < workflow.index("python3 -m pytest")
+    assert "pip install -r requirements-dev.txt" in workflow
+    assert workflow.index("requirements-dev.txt") < workflow.index("python3 -m pytest")
     assert "dist/flight-fare-research-cowork.zip" in workflow and "actions/upload-artifact@v4" in workflow
+    assert "flight-fare-research-dist" in workflow
+    assert "packaging drift" not in workflow
+    assert "pytest>=8,<10" in (ROOT / "requirements-dev.txt").read_text()
+    assert not (ROOT / "integrations/claude-code/skills").exists()
+    assert not (ROOT / "integrations/codex/.agents").exists()
 
 
 def test_ci_secret_scan_fails_closed_on_grep_error():

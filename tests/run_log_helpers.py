@@ -59,3 +59,79 @@ def cli(*args, env=None, input=None):
     e.update(env or {})
     return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)],
                           capture_output=True, text=True, env=e, input=input)
+
+
+# --------------------------------------------------------------------------- v3 builders
+
+def group(*codes, **over):
+    """An airport group; a code may be a str or an airport dict ({"code", "via", ...})."""
+    airports = [c if isinstance(c, dict) else {"code": c} for c in codes]
+    g = {"name": over.pop("name", "+".join(a["code"] for a in airports) or "region"),
+         "airports": airports}
+    g.update(over)
+    return g
+
+
+def leg(frm, to, dates):
+    """A leg; frm/to may be a code, a group dict, or a reference such as "to:1"."""
+    def side(x):
+        return x if isinstance(x, (dict, str)) and (isinstance(x, dict) or ":" in x) else group(x)
+    return {"from": side(frm), "to": side(to), "dates": dates}
+
+
+def contract_v3(**over):
+    c = {"run_id": "t3", "scope": "full", "speed": "thorough",
+         "legs": [leg("ZRH", "ZZZ", {"fixed": "2027-02-03"}),
+                  leg("to:1", "from:1", {"fixed": "2027-02-17"})],
+         "travelers": {"adults": 1, "children_ages": [], "infants": 0},
+         "cabins": ["economy"], "bags": {"checked_per_person": 1, "cabin_per_person": 0},
+         "currency": "CHF", "max_duration": {"value": "20:00:00", "strict": False},
+         "max_stops": None, "time_windows": [], "airlines": {"prefer": [], "exclude": []},
+         "hacks": {"split": False, "open_jaw": False, "stopover": False},
+         "self_transfer_ok": False, "positioning": {"allowed": True, "overnight_ok": False},
+         "budget": None, "event": None, "shortlist": 4, "assumptions": []}
+    c.update(over)
+    return c
+
+
+def leg_entry(n=1, **over):
+    base = {1: {"from": "ZRH", "to": "ZZZ", "dep": "2027-02-03T07:10:00", "arr": "2027-02-03T09:05:00",
+                "duration": "02:55:00"},
+            2: {"from": "ZZZ", "to": "ZRH", "dep": "2027-02-17T18:00:00", "arr": "2027-02-17T22:00:00",
+                "duration": "03:00:00"}}[n]
+    d = dict(base, leg=n, part=1, stops=0, airlines=["XX"], airport_change=False, self_transfer=False)
+    d.update(over)
+    return d
+
+
+def row_v3(**over):
+    r = {"source": "google-flights", "family": "google", "engine": "test", "outcome": "populated",
+         "url": "https://example.test/search", "retrieved_at": "2027-01-08T14:03:00+01:00",
+         "cabin": "economy", "cabin_label": "Economy", "hack": None, "phase": "exact",
+         "origin": "ZRH", "destination": "ZZZ", "dates": ["2027-02-03", "2027-02-17"],
+         "currency": "CHF", "fx": None, "price_basis": "total",
+         "tickets": [ticket()], "legs": [leg_entry(1), leg_entry(2)],
+         "components": {}, "supersedes": None, "notes": ""}
+    r.update(over)
+    return r
+
+
+def ground(**over):
+    g = {"kind": "ground", "source": "sbb", "engine": "test", "url": "https://sbb.test/",
+         "retrieved_at": "2027-01-08T14:03:00+01:00", "from": "ZRH", "to": "BSL", "date": "2027-02-03",
+         "price": 32.4, "currency": "CHF", "quote_state": "completed", "notes": ""}
+    g.update(over)
+    return g
+
+
+def records_v3(*items):
+    """Fare rows get type row and ids r1..; ground rows get type ground and ids g1.."""
+    out, r, g = [], 0, 0
+    for item in items:
+        if item.get("kind") == "ground":
+            g += 1
+            out.append(dict(item, type="ground", id=f"g{g}"))
+        else:
+            r += 1
+            out.append(dict(item, type="row", id=f"r{r}"))
+    return out

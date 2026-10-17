@@ -11,8 +11,9 @@ books: the canary contract, per-source state, staleness and ladder order.
   source_ledger.py order [--json] [--engine NAME]
 
 --engine names the browser that produced the state (for example
-claude-in-chrome, browser-act, headless-playwright): a block on one engine is
-not proof of a block on another.
+browser-act-stealth, browser-act, claude-in-chrome, headless-playwright): a
+block on one engine is not proof of a block on another. Each source carries
+pace_seconds (between searches) and sessions_per_site (parallel sessions).
 
 Default ledger (runtime state, kept outside the skill tree so installed or
 read-only skill copies never change and raw probe evidence stays local):
@@ -40,15 +41,23 @@ AVOID = ("blocked", "empty", "error")
 ROLE_RANK = {"discovery": 1, "exact": 2, "ota": 3, "airline": 4, "crosscheck": 5, "opportunistic": 6,
              "positioning": 7, "routes": 8}
 HISTORY_MAX = 5
-# Browser ladder rungs (references/browser-engines.md): lower is closer to the user's own browser.
-ENGINE_RUNG = {"claude-in-chrome": 1, "builtin-browser": 1, "cowork": 1, "browser-act-chrome": 1,
-               "browser-act": 2}
+# Browser ladder rungs (references/browser-engines.md): BrowserAct stealth first, then its local
+# Chromium, then the user's own browser, then a host headless tool.
+ENGINE_RUNG = {"browser-act-stealth": 1, "browser-act": 2, "browser-act-chrome": 3,
+               "claude-in-chrome": 3, "builtin-browser": 3, "cowork": 3}
+# Pacing per source: seconds between searches and parallel sessions on the site.
+PACE = {"google-flights": (12, 1), "google-explore": (12, 1)}
+DEFAULT_PACE = (8, 2)
 
 
 def engine_rung(engine):
     if not engine:
         return None
-    return ENGINE_RUNG.get(engine, 3 if engine.startswith("headless") else None)
+    return ENGINE_RUNG.get(engine, 4 if engine.startswith("headless") else None)
+
+
+def pace_of(source_id):
+    return PACE.get(source_id, DEFAULT_PACE)
 
 CANARY = {"origin": "ZRH", "destination": "LIS", "lead_days": 30, "trip_days": 7,
           "adults": 1, "cabin": "economy", "currency": "CHF", "trip_type": "round-trip"}
@@ -112,6 +121,17 @@ REGISTRY = [
     ("omio", "Omio", "positioning", "omio", False, "https://www.omio.com/", None, None, None),
     ("flightconnections", "FlightConnections", "routes", "flightconnections", False,
      "https://www.flightconnections.com/", None, None, None),
+    # 3.0 candidates for Asia and region discovery: untested until probed on the new engine.
+    ("google-explore", "Google Flights Explore (regions)", "discovery", "google", False,
+     "https://www.google.com/travel/explore", None, None, None),
+    ("emirates-direct", "Emirates (incl. Dubai stopover)", "airline", "emirates", False,
+     "https://www.emirates.com/", None, None, None),
+    ("singapore-direct", "Singapore Airlines", "airline", "singapore", False,
+     "https://www.singaporeair.com/", None, None, None),
+    ("thai-direct", "Thai Airways", "airline", "thai", False, "https://www.thaiairways.com/", None, None, None),
+    ("airasia-direct", "AirAsia (LCC, intra-Asia)", "airline", "airasia", False,
+     "https://www.airasia.com/", None, None, None),
+    ("scoot-direct", "Scoot (LCC, intra-Asia)", "airline", "scoot", False, "https://www.flyscoot.com/", None, None, None),
 ]
 
 
@@ -287,10 +307,13 @@ def cmd_order(args, data):
         return (not s["core"], ROLE_RANK.get(s["role"], 9), sid)
     items = sorted(data["sources"].items(), key=key)
     fields = ("name", "role", "family", "state", "checked_at")
-    use = [dict(id=i, engine=s.get("engine"), **{k: s[k] for k in fields})
-           for i, s in items if s.get("state") == "ok"]
-    use += [dict(id=i, engine=s.get("engine"), **{k: s[k] for k in fields})
-            for i, s in items if s.get("state") == "partial"]
+
+    def entry(i, s):
+        pace, sessions = pace_of(i)
+        return dict(id=i, engine=s.get("engine"), pace_seconds=pace, sessions_per_site=sessions,
+                    **{k: s[k] for k in fields})
+    use = [entry(i, s) for i, s in items if s.get("state") == "ok"]
+    use += [entry(i, s) for i, s in items if s.get("state") == "partial"]
     untested = [dict(id=i, name=s["name"], role=s["role"]) for i, s in items if not s.get("state")]
     mine = engine_rung(args.engine)
     avoid, reprobe = [], []
@@ -300,22 +323,24 @@ def cmd_order(args, data):
         entry = dict(id=i, name=s["name"], state=s["state"], checked_at=s["checked_at"],
                      engine=s.get("engine"), evidence=s.get("evidence"))
         theirs = engine_rung(s.get("engine"))
-        (reprobe if mine and theirs and mine < theirs else avoid).append(entry)
+        # A block on one rung says nothing about another: the stealth browser masks what blocked
+        # local Chromium, and the user's own browser carries cookies the stealth one lacks.
+        (reprobe if mine and theirs and mine != theirs else avoid).append(entry)
     if args.json:
         print(json.dumps({"use": use, "untested": untested, "reprobe": reprobe, "avoid": avoid}, indent=2))
         return 0
     print("USE (in order):")
     for n, s in enumerate(use, 1):
         print(f"  {n}. {s['id']:<22} {s['role']:<13} family={s['family']:<12} {s['state']:<8}"
-              f" engine={s.get('engine') or '-'}")
+              f" engine={s.get('engine') or '-':<20} pace={s['pace_seconds']}s sessions={s['sessions_per_site']}")
     print("UNTESTED (one probe allowed if needed): " + (", ".join(u["id"] for u in untested) or "-"))
     if reprobe:
-        print(f"RE-PROBE ALLOWED on {args.engine} (failed only on a lower rung): "
+        print(f"RE-PROBE ALLOWED on {args.engine} (failed only on another rung): "
               + ", ".join(s["id"] for s in reprobe))
     print("AVOID this run unless re-probed:")
     for s in avoid:
-        hint = ("  [lower-rung result: one probe allowed in the user's own browser]"
-                if (engine_rung(s.get("engine")) or 0) > 1 and not mine else "")
+        hint = ("  [one probe allowed on another rung: pass --engine]"
+                if engine_rung(s.get("engine")) and not mine else "")
         print(f"  - {s['id']:<22} {s['state']:<8} {(s['checked_at'] or '')[:10]}  "
               f"engine={s.get('engine') or '-'}  {s['evidence']}{hint}")
     return 0
@@ -334,7 +359,7 @@ def main(argv=None):
     r.add_argument("--add", action="store_true", help="register a source missing from the registry")
     r.add_argument("--name"); r.add_argument("--role", choices=sorted(ROLE_RANK)); r.add_argument("--family")
     o = sub.add_parser("order"); o.add_argument("--json", action="store_true")
-    o.add_argument("--engine", help="your engine: failures recorded only on a lower rung become re-probes")
+    o.add_argument("--engine", help="your engine: failures recorded on another rung become one allowed re-probe")
     args = p.parse_args(argv)
     args.ledger = args.ledger or default_ledger()
     data = load(args.ledger) if args.cmd != "canary" else None
