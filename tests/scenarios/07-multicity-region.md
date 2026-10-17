@@ -26,4 +26,16 @@ Not comparable: the 2.x contract had no regions, groups or legs.
 
 ## After (v3.0.0)
 
-(to be recorded)
+Run 2026-10-17 against the 3.0.0 skill: all five criteria pass. Before any
+exact-date search the agent proposed four gateways (BKK, KUL, SIN, SGN) with
+every price labelled a lead, the source, basis (2 adults vs per person) and
+retrieval time, the dearer ones named, and the FlightConnections non-stop
+facts; it asked "confirm, swap or add" and stated that without an answer the
+proposal stands as an assumption and the same commands run. Next commands:
+`run_log.py shortlist`, `confirm --top 3`, `jobs`, premium sweeps per gateway,
+one `gflights.py sweep --tuples` in `ffr-google-1 --attended`. The open-jaw
+hack carries the "into one city, out of another" wish; no third leg was
+invented. BSL/GVA options are described as leads until an SBB ground row
+exists. Side finding: the agent refused to add Explore cards as rows because
+the observation gave no dates ("I will not invent dates"), which the key rule
+requires; `discovery.md` already says to record the card's dates.
