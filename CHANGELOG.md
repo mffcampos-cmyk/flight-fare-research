@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.0.0]
+
+A new contract, BrowserAct first, and the host packages built instead of committed.
+
+- **Legs.** The contract is a list of legs with airport groups: one-way, round trip and multi-city in one model; a nearby airport carries how it is reached (`"via": "rail"`) and needs a priced **ground row** before a fare row from it can qualify. Dates per leg: fixed, a range, plus-or-minus days, or a trip length linked to an earlier leg; `init` expands them into date tuples. Nearby origins, alternative destinations and multi-city are baseline now; the hacks are `split`, `open_jaw` and `stopover`, each on or off at intake. New gates: `max_stops`, time windows, excluded airlines; new flags: budget, preferred airline, overnight before departure.
+- **Regions and discovery.** A destination may be a region; `references/discovery.md` turns it into a shortlist of gateways from FlightList range sweeps, Google Flights Explore and FlightConnections, proposed to the user as leads, then `run_log.py shortlist`.
+- **Speed modes.** `fast` (one range search per destination, then `run_log.py confirm` picks the cheapest tuples for exact-date confirmation) or `thorough` (every tuple, capped at 200).
+- **The questionnaire.** Intake sends all 18 options every run, each with its default; "just go" turns them into listed assumptions.
+- **BrowserAct first.** New `scripts/browseract.py`: login check (`status`, cached 24 h, tells the user how to create the free account, never creates it), engine ladder (stealth browser, local Chromium, the user's own browser, host headless), a shared session driver, and the challenge policy (`solve-captcha` once, then `remote-assist`, then the user's own hands, else blocked). The 2.x ban on CAPTCHA solving, fingerprint masking and proxies is lifted for BrowserAct's own free features; the agent still never buys proxies or browsers, books, or handles credentials (`docs/safety-and-provenance.md`).
+- **Sweeps and the planner.** `flightlist.py sweep` drives the whole range search; `gflights.py sweep` takes `--tuples`, N-leg URLs and the challenge policy; new `kiwi.py fare` reprices a FlightList card on the Kiwi fare page; `run_log.py jobs` prints one job list per parallel session; `source_ledger.py` carries the new rungs, pacing per source and the Asia candidates (Qatar, Emirates, Turkish, Singapore, Thai, AirAsia, Scoot, Trip.com, Google Explore).
+- **run_log.py** is now storage plus CLI on `ffr_contract.py` and `ffr_rows.py`; `add` takes fare rows, ground rows and attempts in one array; new `shortlist`, `confirm` and `jobs` commands.
+- **Packaging.** `integrations/claude-code/skills/` and `integrations/codex/.agents/` are no longer committed: `package.py` builds `dist/claude-code/`, `dist/codex/` and the Cowork zip; CI uploads them; `requirements-dev.txt` holds pytest.
+- **Tests and scenarios.** The run_log tests are rewritten for v3; `browseract.py` is tested against a fake CLI on `PATH`; scenario 04 is rewritten for the new challenge policy; new scenarios 07 (region, multi-city), 08 (full questionnaire, "just go") and 09 (no BrowserAct login).
+- **Known gaps.** No Google Explore page text could be captured (the datacenter probe got the "unusual traffic" check), so `gflights.py parse --explore` reports only `challenge` or `unavailable` and the cards are read by hand; the Kiwi fare-page fixture is synthetic and labelled; the Asia airline sites are registry entries without recipes until a live flow completes.
+
 ## [2.1.0]
 
 Everything here comes from a live test run (ZRH–GIG, 25 date pairs, four cabins, every route hack, BrowserAct `chrome`, 2026-10-08/09).

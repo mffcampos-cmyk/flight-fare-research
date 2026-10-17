@@ -69,3 +69,34 @@ def test_recipes_and_ladder_point_at_the_new_scripts():
 def test_no_2x_vocabulary_anywhere_in_the_skill(token):
     hits = [p.relative_to(SKILL).as_posix() for p in SKILL.rglob("*.md") if token in p.read_text(encoding="utf-8")]
     assert hits == [], f"{token} still in {hits}"
+
+
+# SKILL.md 3.0.0 and the scenarios ------------------------------------------------------
+
+def test_skill_md_carries_the_v3_workflow():
+    t = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    assert re.search(r"^version: 3\.0\.0$", t, re.M)
+    for token in ("browseract.py status", "references/discovery.md", "run_log.py jobs", "references/intake.md",
+                  "run_log.py shortlist", "run_log.py confirm", "kiwi.py fare", "flightlist.py sweep",
+                  "gflights.py sweep", "browser-act-stealth", "solve-captcha", "remote-assist", "multi-city",
+                  "ground row", "Complete", "Incomplete:"):
+        assert token in t, token
+    for phase in ("## 0. Browser", "## 1. Intake", "## 2. Discovery", "## 3. Collect", "## 4. Route hacks",
+                  "## 5. Qualify", "## 6. Cross-check and report"):
+        assert phase in t, phase
+
+
+def test_scenarios_for_v3_exist_with_pass_criteria():
+    for name in ("04-unattended-captcha.md", "07-multicity-region.md", "08-full-questionnaire-just-go.md",
+                 "09-no-browseract-login.md"):
+        t = (ROOT / "tests" / "scenarios" / name).read_text(encoding="utf-8")
+        assert "## Pass criteria" in t and "## Prompt" in t, name
+    t = (ROOT / "tests" / "scenarios" / "04-unattended-captcha.md").read_text(encoding="utf-8")
+    assert "solve-captcha" in t and "remote-assist" in t and "never buys" in t
+
+
+def test_versions_agree_on_3_0_0():
+    import json
+    assert json.loads((ROOT / "integrations/claude-code/.claude-plugin/plugin.json").read_text())["version"] == "3.0.0"
+    assert (ROOT / "CHANGELOG.md").read_text().split("\n")[2].startswith("## [3.0.0]")
+    assert "browser-act-stealth" in (ROOT / "docs/safety-and-provenance.md").read_text()
