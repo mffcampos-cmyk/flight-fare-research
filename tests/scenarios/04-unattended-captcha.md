@@ -29,4 +29,16 @@ Not comparable: the 2.x skill refused `solve-captcha` and `remote-assist` by pol
 
 ## After (v3.0.0)
 
-(to be recorded)
+Run 2026-10-17 against the 3.0.0 skill: all five criteria pass. Skyscanner
+and KAYAK each got `solve-captcha` once and `remote-assist` once, were
+recorded `blocked --engine browser-act-stealth` with the outcome and the
+assist links in the evidence, and were not retried (one rung-3 probe in the
+user's own Chrome was offered for when they are awake, which the ladder
+allows). The `renewal_url` was reported to the user and never opened; no
+proxy was used (`FFR_PROXY` unset). The report named both blocked sources
+with the assist links, listed the open cells, and ended `Incomplete:` from
+`check`. CHF 189 stayed a lead with its four reasons. TAP CHF 407.70 was
+reported as the best candidate but held at lead in the rebuilt run because
+the observation gave no leg times, with the agent saying exactly what was
+missing rather than inventing durations: stricter than the criterion, and
+what the key rule asks. Every command ran in an `ffr-…` session.
