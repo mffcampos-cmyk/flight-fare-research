@@ -37,3 +37,16 @@ connections". The agent reported two skill gaps, both fixed in the same commit:
 `open_jaw` stayed open with no second airport (now auto not-applicable), and
 `intake.md`'s example contract contradicted its defaults table (now labelled as
 the post-reply contract).
+
+## After (v3.0.0)
+
+Run 2026-10-17 against the 3.0.0 skill (observation added: the `browser-act`
+CLI is not on PATH): all four criteria pass. One message with all 18 items and
+a default each (November as a 1–30 Nov range, 3–7 nights, ZRH plus BSL and GVA
+by rail, 1 adult, economy, 1 checked bag, CHF, no limits, split and open-jaw
+on, no self-transfer, no budget, fast, no event), `browseract.py status`'s
+install line quoted verbatim as item 18, and the one thing the skill forbids
+assuming kept as the only question: the OK to install the CLI. The contract
+carried the 18 assumptions; `init` gave 150 tuples and 6 cells; the ledger
+gate (exit 3) was honoured; no price was given and the honest end state for a
+declined install was stated as `Incomplete:` with every cell open.
