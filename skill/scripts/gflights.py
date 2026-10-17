@@ -32,6 +32,7 @@ import base64
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -261,6 +262,7 @@ def sweep(run_dir: str, session, *, cabins: list[str] | None = None, tuples: lis
     cabins = cabins or contract["cabins"]
     origin = origin or ffr_contract.home_airport(contract["legs"][0]["from"])
     destination = destination or ffr_contract.home_airport(contract["legs"][0]["to"])
+    home = origin.split("+")[0]  # several origins in one search: each card names its own airport
     wanted = contract.get("date_tuples") or ffr_contract.expand_tuples(contract)
     if tuples:
         keys = {tuple(_parse_tuple(t)) for t in tuples}
@@ -282,7 +284,7 @@ def sweep(run_dir: str, session, *, cabins: list[str] | None = None, tuples: lis
                 waited += poll
                 result = parse(session.read_markdown(), dates[0])
             base = {"source": "google-flights", "family": "google", "engine": engine, "url": address,
-                    "retrieved_at": _stamp(), "cabin": cabin, "hack": None, "phase": "exact", "origin": origin,
+                    "retrieved_at": _stamp(), "cabin": cabin, "hack": None, "phase": "exact", "origin": home,
                     "destination": destination, "dates": list(dates)}
             label = f"{cabin} {'/'.join(dates)}"
             if result["state"] == "challenge":
@@ -338,7 +340,7 @@ def _card_row(card: dict, base: dict, cabin: str, extra_notes: list[str] | None 
     for extra in extra_notes or []:
         notes += f"; {extra}"
     return dict(base, outcome="populated", cabin_label=card["cabin_label"] or shown,
-                currency=card["currency"], fx=None, price_basis="total",
+                origin=card["from"] or base["origin"], currency=card["currency"], fx=None, price_basis="total",
                 tickets=[{"price": card["price"], "quote_state": "list",
                           "provider": card["airlines"] or "Google Flights listing", "baggage": "unverified",
                           "bag_fee": None, "booking_url": base["url"]}],
@@ -439,6 +441,8 @@ def main(argv: list[str] | None = None) -> int:
             session = browseract.Session(args.session, args.browser)
             run_dir = run_log.resolve_run_dir(args.run)
             state = browseract.status()
+            if not args.browser:
+                session.browser = browseract.default_browser(state["engine"])
 
             def on_challenge(current):
                 return browseract.handle_challenge(current, logged_in=state["logged_in"],
@@ -451,7 +455,7 @@ def main(argv: list[str] | None = None) -> int:
                             log=lambda message: print(message, flush=True))
             print(json.dumps(summary))
             return 3 if summary["stopped"] else 0
-    except (ValueError, OSError, UsageError) as exc:
+    except (ValueError, OSError, UsageError, subprocess.SubprocessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     return 0

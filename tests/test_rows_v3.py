@@ -229,3 +229,43 @@ def test_phase_defaults_to_exact_and_cell_ids_follow_speed():
     assert ffr_rows.row_cell_id(r, fast) == "economy/confirm/ZZZ"
     assert ffr_rows.row_cell_id(row_v3(), norm()) == "economy/baseline/ZRH-ZZZ/2027-02-03_2027-02-17"
     assert ffr_rows.row_cell_id(row_v3(hack="split"), norm()) == "economy/hack/split"
+
+
+# review fixes: region rows before the shortlist; ground rows in another currency -------
+
+def region_contract():
+    c = contract_v3(speed="fast")
+    c["legs"][0]["from"] = group("ZRH", {"code": "BSL", "via": "rail"})
+    c["legs"][0]["to"] = {"name": "SE Asia", "region": True, "airports": []}
+    return c
+
+
+def bkk_row(**over):
+    base = dict(destination="BKK", phase="discover", source="flightlist", family="kiwi",
+                tickets=[ticket(price=1244.0, quote_state="list", baggage="unverified")],
+                legs=[leg_entry(1, to="BKK"), leg_entry(2, **{"from": "BKK"})])
+    base.update(over)
+    return row_v3(**base)
+
+
+def test_discover_rows_for_any_gateway_are_accepted_before_the_shortlist():
+    c = norm(region_contract())
+    assert ffr_rows.validate_row(bkk_row(), c) == []
+    assert ffr_rows.row_status(dict(bkk_row(), id="r1"), c, set(), [])[0] == "lead"
+    assert ffr_rows.row_cell_id(bkk_row(), c) == "economy/discover/BKK"
+    assert any("not in contract" in e for e in ffr_rows.validate_row(bkk_row(legs=[leg_entry(1, to="BKK"), leg_entry(2, **{"from": "BKK"}, to="QQQ")]), c))
+
+
+def test_region_rows_keep_their_cell_after_the_shortlist():
+    c = ffr_contract.apply_shortlist(norm(region_contract()), ["BKK", "SIN"])
+    assert ffr_rows.row_cell_id(bkk_row(), c) == "economy/discover/BKK"
+    assert ffr_rows.validate_row(bkk_row(), c) == []
+    assert any("not in contract" in e for e in ffr_rows.validate_row(bkk_row(destination="KUL", legs=[leg_entry(1, to="KUL"), leg_entry(2, **{"from": "KUL"})]), c))
+
+
+def test_ground_row_in_another_currency_needs_fx():
+    eur = [ground(currency="EUR", price=30.0), ground(date="2027-02-17", **{"from": "BSL", "to": "ZRH"}, currency="EUR", price=30.0)]
+    assert "ground unpriced (BSL)" in status(basel_row(), nearby_contract(), grounds=eur)[1]
+    with_fx = [dict(g, fx={"rate": 0.95, "date": "2027-01-08", "source": "ECB"}) for g in eur]
+    assert status(basel_row(), nearby_contract(), grounds=with_fx)[0] == "qualified"
+    assert ffr_rows.all_in(basel_row(), norm(nearby_contract()), with_fx) == 457.0

@@ -223,13 +223,14 @@ def test_new_rungs_browseract_stealth_first():
     assert source_ledger.engine_rung("browser-act-stealth") == 1
 
 
-def test_order_marks_lower_rung_failures_as_reprobe_on_the_new_ladder(ledger):
+def test_order_allows_one_reprobe_on_any_other_rung(ledger):
     run("record", "kayak", "blocked", "--evidence", "x", "--engine", "browser-act-stealth", ledger=ledger)
     own = json.loads(run("order", "--json", "--engine", "claude-in-chrome", ledger=ledger)[1])
-    assert "kayak" in [s["id"] for s in own["avoid"]]  # rung 3 is below rung 1: no re-probe
+    assert "kayak" in [s["id"] for s in own["reprobe"]]  # the user's own browser carries their cookies
     run("record", "momondo", "blocked", "--evidence", "x", "--engine", "browser-act", ledger=ledger)
     stealth = json.loads(run("order", "--json", "--engine", "browser-act-stealth", ledger=ledger)[1])
     assert "momondo" in [s["id"] for s in stealth["reprobe"]] and "kayak" in [s["id"] for s in stealth["avoid"]]
+    assert "kayak" in [s["id"] for s in json.loads(run("order", "--json", ledger=ledger)[1])["avoid"]]
 
 
 def test_order_json_carries_pace_and_sessions(ledger):

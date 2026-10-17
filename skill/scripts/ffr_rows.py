@@ -157,6 +157,9 @@ def validate_ground(row: dict, contract: dict) -> list[str]:
         errors.append(f"quote_state must be one of {', '.join(QUOTE_STATES)}")
     if row.get("date") not in (None, "") and not _is_date(row["date"]):
         errors.append("date must be YYYY-MM-DD")
+    fx = row.get("fx")
+    if fx is not None and (not isinstance(fx, dict) or not _is_number(fx.get("rate")) or fx["rate"] <= 0):
+        errors.append("fx must be null or {\"rate\": number > 0, \"date\": ..., \"source\": ...}")
     if errors:
         return errors
     pair = {row["from"], row["to"]}
@@ -181,6 +184,13 @@ def row_cell_id(row: dict, contract: dict) -> str:
     return f"{cabin}/baseline/{row.get('origin')}-{row.get('destination')}/{tuple_id(row.get('dates') or [])}"
 
 
+def _allowed(group: dict, code) -> bool:
+    """Whether an airport may appear on this side: any code for a region awaiting its shortlist."""
+    if group.get("region") and not group.get("airports"):
+        return isinstance(code, str) and bool(IATA.match(code))
+    return code in airports(group)
+
+
 def _contract_mismatch(row: dict, c: dict) -> list[str]:
     """Reasons a populated row describes a different search than the contract."""
     reasons = []
@@ -201,16 +211,16 @@ def _contract_mismatch(row: dict, c: dict) -> list[str]:
         lg = c["legs"][n - 1]
         parts = sorted(parts, key=lambda d: d.get("part", 1))
         first, last = parts[0].get("from"), parts[-1].get("to")
-        if first not in airports(lg["from"]):
+        if not _allowed(lg["from"], first):
             reasons.append(f"leg {n}: origin {first} not in contract")
-        if last not in airports(lg["to"]):
+        if not _allowed(lg["to"], last):
             reasons.append(f"leg {n}: destination {last} not in contract")
     if 1 in by_leg:
         if row.get("origin") != sorted(by_leg[1], key=lambda d: d.get("part", 1))[0].get("from"):
             reasons.append(f"leg 1: origin {row.get('origin')} not in contract")
-    elif row.get("origin") not in airports(c["legs"][0]["from"]):
+    elif not _allowed(c["legs"][0]["from"], row.get("origin")):
         reasons.append(f"leg 1: origin {row.get('origin')} not in contract")
-    if row.get("destination") not in airports(c["legs"][0]["to"]):
+    if not _allowed(c["legs"][0]["to"], row.get("destination")):
         reasons.append(f"leg 1: destination {row.get('destination')} not in contract")
     return list(dict.fromkeys(reasons))
 
@@ -283,11 +293,24 @@ def ground_for(row: dict, c: dict, grounds: list[dict]) -> dict[str, list]:
         for code, home, day in ((d.get("from"), home_airport(lg["from"]), dates.get(n)),
                                 (d.get("to"), home_airport(lg["to"]), str(d.get("arr") or "")[:10] or dates.get(n))):
             if code in vias and code != home:
-                out.setdefault(code, []).append(_pick_ground(grounds, code, home, day, vias[code].get("overnight_ok")))
+                out.setdefault(code, []).append(_pick_ground(grounds, code, home, day, vias[code].get("overnight_ok"),
+                                                             c["currency"]))
     return out
 
 
-def _pick_ground(grounds: list[dict], code: str, home: str, day: str | None, overnight_ok: bool):
+def ground_amount(g: dict, currency: str) -> float | None:
+    """A ground row's price in the contract currency, or None when it cannot be converted."""
+    if not _is_number(g.get("price")):
+        return None
+    if g.get("currency") == currency:
+        return float(g["price"])
+    fx = g.get("fx")
+    if isinstance(fx, dict) and _is_number(fx.get("rate")) and fx["rate"] > 0:
+        return float(g["price"]) * fx["rate"]
+    return None
+
+
+def _pick_ground(grounds: list[dict], code: str, home: str, day: str | None, overnight_ok: bool, currency: str):
     if not day:
         return None
     allowed = {day}
@@ -296,10 +319,10 @@ def _pick_ground(grounds: list[dict], code: str, home: str, day: str | None, ove
         allowed.add((date.fromisoformat(day) + timedelta(days=1)).isoformat())
     matches = [g for g in grounds
                if g.get("quote_state") in ("completed", "repriced") and {g.get("from"), g.get("to")} == {code, home}
-               and g.get("date") in allowed and _is_number(g.get("price"))]
+               and g.get("date") in allowed and ground_amount(g, currency) is not None]
     if not matches:
         return None
-    return min(matches, key=lambda g: (g["date"] != day, g["price"]))
+    return min(matches, key=lambda g: (g["date"] != day, ground_amount(g, currency)))
 
 
 def lead_reasons(row: dict, c: dict, grounds: list[dict]) -> list[str]:
@@ -378,7 +401,7 @@ def _sum_parts(row: dict, c: dict, grounds: list[dict]) -> float:
     if row.get("fx"):
         total *= row["fx"]["rate"]
     for chosen in ground_for(row, c, grounds).values():
-        total += sum(g["price"] for g in chosen if g)
+        total += sum(ground_amount(g, c["currency"]) or 0 for g in chosen if g)
     return round(total, 2)
 
 

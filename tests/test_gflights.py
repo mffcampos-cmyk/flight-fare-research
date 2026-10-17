@@ -147,7 +147,7 @@ class FakePage:
 
 
 def premium_contract(run_id="g1", **over):
-    c = contract_v3(run_id=run_id, cabins=["premium"], **over)
+    c = contract_v3(run_id=run_id, **dict({"cabins": ["premium"]}, **over))
     c["legs"] = [leg("ZRH", "GIG", {"fixed": "2026-12-22"}), leg("to:1", "from:1", {"fixed": "2027-01-12"})]
     return c
 
@@ -287,3 +287,14 @@ def test_cli_explore_prints_url_and_steps():
     r = subprocess.run([sys.executable, "-B", str(GF), "explore", "--region", "Southeast Asia", "--from", "ZRH",
                         "--window", "2027-02-01,2027-02-10"], capture_output=True, text=True)
     assert r.returncode == 0 and "travel/explore" in r.stdout and "Southeast Asia" in r.stdout
+
+
+def test_sweep_with_several_origins_takes_each_row_origin_from_the_card(tmp_path):
+    c = premium_contract("g5", cabins=["economy"])  # the multi-airport page is an economy search
+    c["legs"][0]["from"] = group("ZRH", *({"code": x, "via": "rail"} for x in ("BSL", "GVA", "MXP", "MUC", "FRA")))
+    run = make_run(tmp_path, c)
+    fake = FakePage([page("multiairport")])
+    summary = gflights.sweep(str(run), fake, cabins=["economy"], origin="BSL+GVA+MXP+MUC+FRA", sleep=no_sleep)
+    rows = saved(run)
+    assert summary["rows"] >= 2 and {r["origin"] for r in rows} >= {"MUC", "GVA"}
+    assert all(r["legs"][0]["from"] == r["origin"] for r in rows)

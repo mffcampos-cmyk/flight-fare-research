@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -88,11 +89,17 @@ def parse_card(card) -> dict:
     summaries = SUMMARY.findall(text)
     stay = text.find("Stay in ")
     segments = [(m.start(), m.groups()) for m in SEGMENT.finditer(text)]
-    if len(summaries) < 2 or stay < 0 or not segments:
-        raise ValueError(f"card without both directions: {text[:80]!r}")
+    if not summaries or not segments:
+        raise ValueError(f"card without a direction summary: {text[:80]!r}")
+    if len(summaries) >= 2 and stay >= 0:
+        plan = (("out", summaries[0], [g for at, g in segments if at < stay]),
+                ("ret", summaries[1], [g for at, g in segments if at > stay]))
+    elif len(summaries) == 1 and stay < 0:
+        plan = (("out", summaries[0], [g for at, g in segments]),)
+    else:
+        raise ValueError(f"card mixes one-way and return text: {text[:80]!r}")
     directions = []
-    for name, summary, part in (("out", summaries[0], [g for at, g in segments if at < stay]),
-                                ("ret", summaries[1], [g for at, g in segments if at > stay])):
+    for name, summary, part in plan:
         if not part:
             raise ValueError(f"no {name} segments in card: {text[:80]!r}")
         first, last = part[0], part[-1]
@@ -129,8 +136,8 @@ def _within(card: dict, cap: dict | None) -> bool:
 
 
 def _row(card: dict, base: dict) -> dict:
-    out, ret = card["directions"]
-    notes = [f"FlightList card; flights {' '.join(out['flights'])} / {' '.join(ret['flights'])}",
+    out = card["directions"][0]
+    notes = ["FlightList card; flights " + " / ".join(" ".join(d["flights"]) for d in card["directions"]),
              "bag filter does not prove the bag is in the price"]
     for d in card["directions"]:
         if d["mixed_carriers"]:
@@ -140,7 +147,7 @@ def _row(card: dict, base: dict) -> dict:
     legs = [dict({k: d[k] for k in keys}, leg=n, part=1, self_transfer=False)
             for n, d in enumerate(card["directions"], 1)]
     return dict(base, outcome="populated", origin=out["from"], destination=out["to"],
-                dates=[out["dep"][:10], ret["dep"][:10]], currency=card["currency"], fx=None,
+                dates=[d["dep"][:10] for d in card["directions"]], currency=card["currency"], fx=None,
                 price_basis="total",
                 tickets=[{"price": card["price"], "quote_state": "list", "provider": "Kiwi.com (via FlightList)",
                           "baggage": "unverified", "bag_fee": None, "booking_url": card["book"] or base["url"]}],
@@ -159,11 +166,11 @@ def rows_for(contract: dict, raw_cards: list, *, top: int = 1, cabin: str | None
     parsed = sorted((parse_card(c) for c in raw_cards), key=lambda c: c["price"])
     by_tuple: dict[tuple, list] = {}
     for card in parsed:
-        key = (card["directions"][0]["dep"][:10], card["directions"][1]["dep"][:10])
+        key = tuple(d["dep"][:10] for d in card["directions"])
         by_tuple.setdefault(key, []).append(card)
     rows, missing = [], []
     for dates in contract.get("date_tuples") or ffr_contract.expand_tuples(contract):
-        found = by_tuple.get(tuple(dates[:2]), []) if len(dates) == 2 else []
+        found = by_tuple.get(tuple(dates), []) if len(dates) <= 2 else []
         if not found:
             missing.append(ffr_contract.tuple_id(dates))
             continue
@@ -217,6 +224,9 @@ def sweep(run_dir: str, session, *, cabin: str | None = None, origins: list[str]
 
     `session` is a browseract.Session (navigate, run, eval, read_markdown)."""
     contract = run_log.load_run(run_dir)[0]
+    if contract.get("shape") == "multi_city":
+        raise UsageError("FlightList range searches cover one-way and return trips only; "
+                         "for multi-city search leg 1 on Google (gflights.py url) or by hand")
     cabin = cabin or contract["cabins"][0]
     origins = origins or ffr_contract.airports(contract["legs"][0]["from"])
     destination = destination or ffr_contract.home_airport(contract["legs"][0]["to"])
@@ -340,6 +350,8 @@ def main(argv: list[str] | None = None) -> int:
             session = browseract.Session(args.session, args.browser)
             run_dir = run_log.resolve_run_dir(args.run)
             state = browseract.status()
+            if not args.browser:
+                session.browser = browseract.default_browser(state["engine"])
 
             def on_challenge(current):
                 return browseract.handle_challenge(current, logged_in=state["logged_in"],
@@ -362,7 +374,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{len(rows)} rows for {covered} date tuple(s)", file=sys.stderr)
         for t in missing:
             print(f"no card for {t}: search it separately", file=sys.stderr)
-    except (ValueError, OSError, UsageError) as exc:
+    except (ValueError, OSError, UsageError, subprocess.SubprocessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     return 0

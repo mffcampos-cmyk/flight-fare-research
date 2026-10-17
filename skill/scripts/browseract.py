@@ -67,11 +67,21 @@ def binary() -> str | None:
 
 
 def run_cli(args: list[str], *, timeout: int = 120, input: str | None = None) -> subprocess.CompletedProcess:
-    """Run the browser-act CLI; raises UsageError when it is not installed."""
+    """Run the browser-act CLI; raises UsageError when it is not installed or hangs."""
     path = binary()
     if not path:
         raise UsageError("browser-act CLI not found; see references/browser-engines.md")
-    return subprocess.run([path, *args], capture_output=True, text=True, timeout=timeout, input=input)
+    try:
+        return subprocess.run([path, *args], capture_output=True, text=True, timeout=timeout, input=input)
+    except subprocess.TimeoutExpired:
+        raise UsageError(f"browser-act {' '.join(args[:3])} timed out after {timeout} s")
+    except subprocess.SubprocessError as exc:
+        raise UsageError(f"browser-act {' '.join(args[:3])} failed to run: {exc}")
+
+
+def default_browser(engine: str | None) -> str:
+    """The BrowserAct browser a session opens on: the stealth one on rung 1, the local one otherwise."""
+    return "ffr-stealth" if engine == "browser-act-stealth" else "ffr"
 
 
 # --------------------------------------------------------------------------- status
@@ -181,15 +191,23 @@ def status_lines(state: dict) -> list[str]:
 class Session:
     """One BrowserAct session the agent opened itself. Names start with ffr-."""
 
-    def __init__(self, name: str, browser: str | None = None, *, runner=run_cli):
+    def __init__(self, name: str, browser: str | None = None, *, engine: str | None = None, runner=run_cli):
         if not name.startswith(SESSION_PREFIX) or name == SESSION_PREFIX:
             raise UsageError(f"session names start with {SESSION_PREFIX}<source>-<n>; never drive a session you did not open")
         self.name = name
-        self.browser = browser or "ffr"
+        self.browser = browser or default_browser(engine)
         self.runner = runner
 
+    def _call(self, args: list[str]) -> subprocess.CompletedProcess:
+        try:
+            return self.runner(args)
+        except subprocess.TimeoutExpired:
+            raise UsageError(f"browser-act {' '.join(args[2:4])} timed out (session {self.name})")
+        except subprocess.SubprocessError as exc:
+            raise UsageError(f"browser-act {' '.join(args[2:4])} failed to run: {exc}")
+
     def run(self, *args: str) -> str:
-        result = self.runner(["--session", self.name, *args])
+        result = self._call(["--session", self.name, *args])
         if result.returncode != 0:
             raise UsageError(f"browser-act {args[0]} failed: {(result.stderr or result.stdout).strip()[:300]}")
         return result.stdout
@@ -231,16 +249,16 @@ class Session:
         return hits
 
     def solve_captcha(self) -> bool:
-        result = self.runner(["--session", self.name, "solve-captcha"])
+        result = self._call(["--session", self.name, "solve-captcha"])
         return result.returncode == 0 and "solved=true" in result.stdout.lower()
 
     def remote_assist(self, objective: str) -> str | None:
-        result = self.runner(["--session", self.name, "remote-assist", "--objective", objective])
+        result = self._call(["--session", self.name, "remote-assist", "--objective", objective])
         match = URL.search(result.stdout)
         return match.group(0) if result.returncode == 0 and match else None
 
     def close(self) -> None:
-        self.runner(["session", "close", self.name])
+        self._call(["session", "close", self.name])
 
 
 def is_challenge(text: str, network: list[dict]) -> bool:

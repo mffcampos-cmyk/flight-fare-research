@@ -193,3 +193,21 @@ def test_cli_status_json_and_engine(fake_cli, monkeypatch):
 def test_cli_close_all_mine(fake_cli):
     r = run_cli("close", "--all-mine")
     assert r.returncode == 0 and "ffr-google-1" in r.stdout
+
+
+# review fixes: the stealth browser is used when it is the engine; hung CLI calls -------
+
+def test_default_browser_follows_the_engine():
+    assert browseract.default_browser("browser-act-stealth") == "ffr-stealth"
+    assert browseract.default_browser("browser-act") == "ffr"
+    assert browseract.Session("ffr-x-1", engine="browser-act-stealth").browser == "ffr-stealth"
+    assert browseract.Session("ffr-x-1", browser="mine", engine="browser-act-stealth").browser == "mine"
+
+
+def test_hung_cli_call_is_a_usage_error_not_a_traceback():
+    def hangs(args, **kw):
+        raise subprocess.TimeoutExpired(cmd=args, timeout=120)
+    with pytest.raises(browseract.UsageError, match="timed out"):
+        browseract.Session("ffr-x-1", runner=hangs).read_markdown()
+    with pytest.raises(browseract.UsageError, match="timed out"):
+        browseract.Session("ffr-x-1", runner=hangs).solve_captcha()

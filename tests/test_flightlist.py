@@ -183,3 +183,31 @@ def test_cli_sweep_needs_a_session_the_agent_opened(tmp_path):
 def test_overnight_last_segment_arrives_the_next_day():
     out = flightlist.parse_card(cards()[3])["directions"][0]  # TAP ZRH-LIS, then GOL LIS 23:30 -> GIG 06:30
     assert (out["dep"], out["arr"], out["duration"]) == ("2026-12-21T18:00:00", "2026-12-22T06:30:00", "16:30:00")
+
+
+# review fix: one-way cards and contracts --------------------------------------------
+
+ONE_WAY = ("CHF948 6:50am - 6:40pm Tue Dec 22nd 2026 15h 50m Zürich (ZRH) → Rio de Janeiro (GIG) 1 Stop "
+           "Tue Dec 22nd 2026 KLM Royal Dutch Airlines · KL 1916 Depart at 6:50am from Zürich (ZRH) Fly for 1h 35m "
+           "Arrive at 8:25am in Amsterdam (AMS) Layover in Amsterdam for 2h 15m Tue Dec 22nd 2026 KLM Royal Dutch Airlines "
+           "· KL 705 Depart at 10:40am from Amsterdam (AMS) Fly for 12h 0m Arrive at 6:40pm in Rio de Janeiro (GIG)")
+
+
+def test_parse_card_reads_a_one_way_card():
+    card = flightlist.parse_card({"price": "CHF948", "text": ONE_WAY, "book": None})
+    assert card["price"] == 948.0 and len(card["directions"]) == 1
+    assert card["directions"][0]["flights"] == ["KL 1916", "KL 705"] and card["directions"][0]["arr"] == "2026-12-22T18:40:00"
+
+
+def test_rows_for_one_way_contract_emit_one_leg(tmp_path):
+    c = contract_v3(run_id="ow"); c["legs"] = [leg("ZRH", "GIG", {"range": {"from": "2026-12-21", "to": "2026-12-23"}})]
+    r = cli("init", "--contract", write_json(tmp_path / "c.json", c), "--runs-root", tmp_path / "runs")
+    assert r.returncode == 0, r.stderr
+    run = tmp_path / "runs" / "ow"
+    cards = write_json(tmp_path / "cards.json", [{"price": "CHF948", "text": ONE_WAY, "book": None}])
+    r = subprocess.run([sys.executable, "-B", str(FL), "rows", "--run", str(run), str(cards)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    rows = json.loads(r.stdout)
+    assert len(rows) == 1 and rows[0]["dates"] == ["2026-12-22"] and [l["leg"] for l in rows[0]["legs"]] == [1]
+    assert "no card for 2026-12-21" in r.stderr
+    assert cli("add", "--run", run, "--row", "-", input=r.stdout).returncode == 0

@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 
@@ -145,6 +146,8 @@ def main(argv: list[str] | None = None) -> int:
         session = browseract.Session(args.session, args.browser)
         run_dir = run_log.resolve_run_dir(args.run)
         state = browseract.status()
+        if not args.browser:
+            session.browser = browseract.default_browser(state["engine"])
 
         def on_challenge(current):
             return browseract.handle_challenge(current, logged_in=state["logged_in"], user_reachable=args.attended,
@@ -156,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
             return 3
         row_id, status, reasons = result
         print(f"{row_id} {status}" + (": " + "; ".join(reasons) if reasons else ""))
-    except (ValueError, OSError, UsageError) as exc:
+    except (ValueError, OSError, UsageError, subprocess.SubprocessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     return 0

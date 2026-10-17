@@ -323,7 +323,9 @@ def cmd_order(args, data):
         entry = dict(id=i, name=s["name"], state=s["state"], checked_at=s["checked_at"],
                      engine=s.get("engine"), evidence=s.get("evidence"))
         theirs = engine_rung(s.get("engine"))
-        (reprobe if mine and theirs and mine < theirs else avoid).append(entry)
+        # A block on one rung says nothing about another: the stealth browser masks what blocked
+        # local Chromium, and the user's own browser carries cookies the stealth one lacks.
+        (reprobe if mine and theirs and mine != theirs else avoid).append(entry)
     if args.json:
         print(json.dumps({"use": use, "untested": untested, "reprobe": reprobe, "avoid": avoid}, indent=2))
         return 0
@@ -333,12 +335,12 @@ def cmd_order(args, data):
               f" engine={s.get('engine') or '-':<20} pace={s['pace_seconds']}s sessions={s['sessions_per_site']}")
     print("UNTESTED (one probe allowed if needed): " + (", ".join(u["id"] for u in untested) or "-"))
     if reprobe:
-        print(f"RE-PROBE ALLOWED on {args.engine} (failed only on a lower rung): "
+        print(f"RE-PROBE ALLOWED on {args.engine} (failed only on another rung): "
               + ", ".join(s["id"] for s in reprobe))
     print("AVOID this run unless re-probed:")
     for s in avoid:
-        hint = ("  [lower-rung result: one probe allowed on a higher rung]"
-                if (engine_rung(s.get("engine")) or 0) > 1 and not mine else "")
+        hint = ("  [one probe allowed on another rung: pass --engine]"
+                if engine_rung(s.get("engine")) and not mine else "")
         print(f"  - {s['id']:<22} {s['state']:<8} {(s['checked_at'] or '')[:10]}  "
               f"engine={s.get('engine') or '-'}  {s['evidence']}{hint}")
     return 0
@@ -357,7 +359,7 @@ def main(argv=None):
     r.add_argument("--add", action="store_true", help="register a source missing from the registry")
     r.add_argument("--name"); r.add_argument("--role", choices=sorted(ROLE_RANK)); r.add_argument("--family")
     o = sub.add_parser("order"); o.add_argument("--json", action="store_true")
-    o.add_argument("--engine", help="your engine: failures recorded only on a lower rung become re-probes")
+    o.add_argument("--engine", help="your engine: failures recorded on another rung become one allowed re-probe")
     args = p.parse_args(argv)
     args.ledger = args.ledger or default_ledger()
     data = load(args.ledger) if args.cmd != "canary" else None

@@ -447,9 +447,18 @@ def plan_jobs(contract: dict, records: list[dict], run_dir: str, sessions_per_si
             j["cells"].append(cell)
 
     origins = "+".join(fc.airports(contract["legs"][0]["from"]))
-    discover = [(f"{_script('flightlist.py')} sweep --session ffr-flightlist-{{n}} --run {run_dir} "
-                 f"--cabin {cells[cid]['cabin']} --from {origins} --to {cells[cid]['destination']}", cid)
-                for cid in open_ids if cells.get(cid, {}).get("kind") == "discover"]
+    discover_cells = [cid for cid in open_ids if cells.get(cid, {}).get("kind") == "discover"]
+    if contract.get("shape") == "multi_city":
+        for cid in discover_cells:  # FlightList range searches cover one-way and return trips only
+            j = job("recipe", "-", "ffr-discover", "multi-city: no FlightList range search")
+            j["commands"].append(f"multi-city discovery for {cells[cid]['destination']}: search leg 1 on Google "
+                                 f"(gflights.py url) or by hand and add discover rows (references/discovery.md)")
+            j["cells"].append(cid)
+        discover = []
+    else:
+        discover = [(f"{_script('flightlist.py')} sweep --session ffr-flightlist-{{n}} --run {run_dir} "
+                     f"--cabin {cells[cid]['cabin']} --from {origins} --to {cells[cid]['destination']}", cid)
+                    for cid in discover_cells]
     n_fl = SESSIONS_PER_SITE.get("flightlist", sessions_per_site)
     spread("flightlist", "kiwi", [(cmd.replace("{n}", str(i % n_fl + 1)), cid) for i, (cmd, cid) in enumerate(discover)])
 
@@ -463,8 +472,8 @@ def plan_jobs(contract: dict, records: list[dict], run_dir: str, sessions_per_si
         j["commands"].append(f"{_script('run_log.py')} confirm --run {run_dir} --top {top}")
         j["cells"].extend(confirm_waiting)
 
-    google: dict[tuple[str, str], list[str]] = {}
-    google_cells: dict[tuple[str, str], list[str]] = {}
+    google: dict[tuple[str, str, str], list[str]] = {}
+    google_cells: dict[tuple[str, str, str], list[str]] = {}
     for cid in open_ids:
         cell = cells.get(cid)
         if not cell:
@@ -472,18 +481,19 @@ def plan_jobs(contract: dict, records: list[dict], run_dir: str, sessions_per_si
         if cell["kind"] == "confirm" and cell.get("tuples"):
             missing = [t for t in cell["tuples"]
                        if fc.tuple_id(t) in states[cid]["why"]] or cell["tuples"]
-            key = (cell["cabin"], cell["destination"])
+            key = (cell["cabin"], origins, cell["destination"])  # one search covers every origin airport
             google.setdefault(key, []).extend(fc.tuple_id(t) for t in missing)
             google_cells.setdefault(key, []).append(cid)
         elif cell["kind"] == "baseline":
-            key = (cell["cabin"], cell["destination"])
+            key = (cell["cabin"], cell["origin"], cell["destination"])
             google.setdefault(key, []).append(fc.tuple_id(cell["dates"]))
             google_cells.setdefault(key, []).append(cid)
-    for (cabin, dest), tuples in google.items():
+    for (cabin, origin, dest), tuples in google.items():
         j = job("google-flights", "google", "ffr-google-1", "one session: Google's daily allowance")
         j["commands"].append(f"{_script('gflights.py')} sweep --session ffr-google-1 --run {run_dir} "
-                             f"--cabins {cabin} --destination {dest} --tuples {','.join(dict.fromkeys(tuples))}")
-        j["cells"].extend(google_cells[(cabin, dest)])
+                             f"--cabins {cabin} --origin {origin} --destination {dest} "
+                             f"--tuples {','.join(dict.fromkeys(tuples))}")
+        j["cells"].extend(google_cells[(cabin, origin, dest)])
 
     ranked = fr.rank(contract, records)
     reprice_open = [cid for cid in open_ids if cells.get(cid, {}).get("kind") == "reprice"]

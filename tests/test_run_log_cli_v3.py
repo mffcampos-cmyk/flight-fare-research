@@ -217,7 +217,7 @@ def test_jobs_google_runs_in_one_session_and_reprice_uses_kiwi_urls(tmp_path):
     google = [j for j in jobs if j["source"] == "google-flights"]
     assert len(google) == 1 and google[0]["session"] == "ffr-google-1"
     assert "gflights.py sweep --session ffr-google-1 --run" in google[0]["commands"][0]
-    assert "--cabins economy --destination ZZZ --tuples 2027-02-03_2027-02-17" in google[0]["commands"][0]
+    assert "--cabins economy --origin ZRH --destination ZZZ --tuples 2027-02-03_2027-02-17" in google[0]["commands"][0]
     kiwi = [j for j in jobs if j["source"] == "kiwi"]
     assert kiwi and "kiwi.py fare --session ffr-kiwi-1 --run" in kiwi[0]["commands"][0]
     assert "--supersedes r1 https://www.kiwi.com/en/booking/fare-selection/abc" in kiwi[0]["commands"][0]
@@ -271,3 +271,36 @@ def test_concurrent_adds_get_unique_ids(run, tmp_path):
         p.wait()
     ids = [json.loads(line)["id"] for line in (run / "rows.jsonl").read_text().splitlines()]
     assert len(ids) == 8 and len(set(ids)) == 8
+
+
+# review fixes: jobs per origin, no FlightList for multi-city --------------------------
+
+def test_jobs_google_commands_carry_the_origin_per_baseline_cell(tmp_path):
+    c = contract_v3(); c["legs"][0]["from"] = group("ZRH", {"code": "BSL", "via": "rail"})
+    run, _ = init(tmp_path, c)
+    jobs = json.loads(cli("jobs", "--run", run, "--json").stdout)
+    google = [j for j in jobs if j["source"] == "google-flights"][0]
+    assert any("--origin ZRH --destination ZZZ" in cmd for cmd in google["commands"])
+    assert any("--origin BSL --destination ZZZ" in cmd for cmd in google["commands"])
+    assert "economy/baseline/BSL-ZZZ/2027-02-03_2027-02-17" in google["cells"]
+
+
+def test_jobs_confirm_command_searches_every_origin_at_once(tmp_path):
+    c = contract_v3(speed="fast"); c["legs"][0]["from"] = group("ZRH", {"code": "BSL", "via": "rail"})
+    run, _ = init(tmp_path, c)
+    cli("add", "--run", run, "--row", "-", input=json.dumps([row_v3(phase="discover", source="flightlist", family="kiwi",
+                                                                   tickets=[ticket(price=300.0, quote_state="list", baggage="unverified")])]))
+    cli("confirm", "--run", run)
+    google = [j for j in json.loads(cli("jobs", "--run", run, "--json").stdout) if j["source"] == "google-flights"][0]
+    assert "--origin ZRH+BSL --destination ZZZ --tuples 2027-02-03_2027-02-17" in google["commands"][0]
+
+
+def test_jobs_multi_city_gets_no_flightlist_sweep(tmp_path):
+    c = contract_v3(speed="fast")
+    c["legs"] = [leg("ZRH", "BKK", {"fixed": "2027-02-03"}), leg("BKK", "SIN", {"fixed": "2027-02-10"}),
+                 leg("SIN", "ZRH", {"fixed": "2027-02-17"})]
+    run, _ = init(tmp_path, c)
+    jobs = json.loads(cli("jobs", "--run", run, "--json").stdout)
+    assert not [j for j in jobs if j["source"] == "flightlist"]
+    discover = [j for j in jobs if "economy/discover/BKK" in j["cells"]]
+    assert discover and "multi-city" in discover[0]["commands"][0]
