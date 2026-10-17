@@ -22,4 +22,14 @@ Scenario 05 against the 2.x skill: one message of defaults covering nine items; 
 
 ## After (v3.0.0)
 
-(to be recorded)
+Run 2026-10-17 against the 3.0.0 skill: all five criteria pass. One message
+with the 18 items and a default each (round trip; ZRH plus BSL and GVA by
+rail, no overnight; LIS; out 1–28 Feb 2027, back 3–7 nights later; 1 adult;
+economy; 1 checked bag, no cabin bag; CHF; no limit; no stops cap; no
+windows; no airline preference; split and open-jaw on, stopover off; no
+self-transfer; no budget; fast; no event; the not-logged-in browser line with
+`browser-act auth login` and `auth poll`, continuing on the local browser).
+The contract written for `init` carried 18 assumptions, `speed: fast` and the
+three hack booleans (checked in the run directory); `init` gave 140 tuples and
+6 cells; `source_ledger.py status` exit 3 was honoured with canary probes
+before the sweep; no fares were claimed.
