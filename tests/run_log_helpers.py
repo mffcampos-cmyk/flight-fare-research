@@ -59,3 +59,36 @@ def cli(*args, env=None, input=None):
     e.update(env or {})
     return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)],
                           capture_output=True, text=True, env=e, input=input)
+
+
+# --------------------------------------------------------------------------- v3 builders
+
+def group(*codes, **over):
+    """An airport group; a code may be a str or an airport dict ({"code", "via", ...})."""
+    airports = [c if isinstance(c, dict) else {"code": c} for c in codes]
+    g = {"name": over.pop("name", "+".join(a["code"] for a in airports) or "region"),
+         "airports": airports}
+    g.update(over)
+    return g
+
+
+def leg(frm, to, dates):
+    """A leg; frm/to may be a code, a group dict, or a reference such as "to:1"."""
+    def side(x):
+        return x if isinstance(x, (dict, str)) and (isinstance(x, dict) or ":" in x) else group(x)
+    return {"from": side(frm), "to": side(to), "dates": dates}
+
+
+def contract_v3(**over):
+    c = {"run_id": "t3", "scope": "full", "speed": "thorough",
+         "legs": [leg("ZRH", "ZZZ", {"fixed": "2027-02-03"}),
+                  leg("to:1", "from:1", {"fixed": "2027-02-17"})],
+         "travelers": {"adults": 1, "children_ages": [], "infants": 0},
+         "cabins": ["economy"], "bags": {"checked_per_person": 1, "cabin_per_person": 0},
+         "currency": "CHF", "max_duration": {"value": "20:00:00", "strict": False},
+         "max_stops": None, "time_windows": [], "airlines": {"prefer": [], "exclude": []},
+         "hacks": {"split": False, "open_jaw": False, "stopover": False},
+         "self_transfer_ok": False, "positioning": {"allowed": True, "overnight_ok": False},
+         "budget": None, "event": None, "shortlist": 4, "assumptions": []}
+    c.update(over)
+    return c
