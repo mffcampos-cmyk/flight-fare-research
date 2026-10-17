@@ -16,8 +16,11 @@ At the start of every full-path run:
 ```bash
 S=<skill_dir>/scripts/source_ledger.py
 python3 $S status    # exit 0: fresh, skip probing; exit 3: probe the core sources listed
-python3 $S order --engine claude-in-chrome   # USE / UNTESTED / RE-PROBE / AVOID for your engine
+python3 $S order --engine browser-act-stealth   # USE / UNTESTED / RE-PROBE / AVOID for your engine
 ```
+
+`order` also prints each source's pacing (`pace=12s sessions=1` on Google,
+`pace=8s sessions=2` elsewhere), which `run_log.py jobs` and the sweeps follow.
 
 Probe only the sources under `PROBE NEEDED`. Quick runs skip the gate but
 still record any block they meet. The user can ask for a full re-probe at any
@@ -37,7 +40,7 @@ from the canary origin.
 
 ## One probe per source
 
-1. Open the source with the highest-rung engine available (`browser-engines.md`)
+1. Open the source with the highest-rung engine available (`references/browser-engines.md`)
    and decline optional cookies.
 2. On a challenge, record `blocked` with the engine and stop; no retries.
 3. Otherwise run the canary through the source's recipe.
@@ -52,7 +55,7 @@ from the canary origin.
 | `error` | Cannot be driven: picker will not commit, 404 deep link, dead autocomplete. |
 
 ```bash
-python3 $S record edreams ok --results 14 --engine claude-in-chrome \
+python3 $S record edreams ok --results 14 --engine browser-act-stealth \
   --url "<results URL>" --evidence "canary 2026-11-07/14 populated, per-fare bag labels"
 python3 $S record kayak blocked --engine browser-act --evidence "redirect to kayak.com/help/bots.html"
 python3 $S record condor-direct ok --results 3 --engine claude-in-chrome --add \
@@ -70,9 +73,11 @@ airlines fly where; no fares).
   evidence for the user's trip.
 - During a real search, record what you meet: a block right away, and an `ok`
   with `--evidence "real search <route/dates>, not canary"`.
-- States are per engine. A block recorded on `browser-act` or a headless engine
-  does not prove a block in the user's own browser; with a rung-1 engine
-  available, one probe there is allowed.
+- States are per engine. A block recorded on a lower rung (`browser-act`, a
+  headless engine) does not prove a block on a higher one, and a block on the
+  stealth browser does not prove a block in the user's own browser (their
+  cookies): `order --engine <name>` lists the sources that may get one more
+  probe on your engine.
 - Independence follows `family`: FlightList and Kiwi share `kiwi`; Opodo shares
   `edreams`; Momondo shares `kayak`; any Google Flights wrapper is `google`.
 - Before recording `error` or `partial`, check the source's recipe: the first
@@ -83,15 +88,18 @@ airlines fly where; no fares).
 
 To widen the search, probe the `UNTESTED` sources that `order` lists: one
 polite attempt each with the canary (or a recorded variant), paced per
-`browser-engines.md`, recorded with the engine. Sources that return populated
+`references/browser-engines.md`, recorded with the engine. The Asia candidates
+(Qatar, Emirates, Turkish, Singapore, Thai, AirAsia, Scoot, Trip.com) and
+`google-explore` are untested until this is done on the new engine. Sources that return populated
 exact-date results join the ladder in `source-ladder.md`; write a recipe file
 only for a flow you actually completed.
 
 ## No browser on the host
 
-Ask the user before installing anything. The approved fallback is user-space
-Playwright Chromium with a throwaway profile, started as a tracked background
-process and stopped afterwards:
+Ask the user before installing anything; prefer BrowserAct
+(`uv tool install browser-act-cli --python 3.12`, `references/browser-engines.md`).
+The last-resort fallback is user-space Playwright Chromium with a throwaway
+profile, started as a tracked background process and stopped afterwards:
 
 ```bash
 npx -y playwright@latest install chromium
@@ -101,4 +109,4 @@ npx -y playwright@latest install chromium
 pgrep -f 'chrome.*[f]fr-probe-profile' | xargs -r kill
 ```
 
-This is rung 3 (`headless-playwright`): the most likely to be challenged.
+This is rung 4 (`headless-playwright`): the most likely to be challenged.

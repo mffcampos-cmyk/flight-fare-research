@@ -13,7 +13,22 @@ Set the departure picker to the whole outbound range and the return picker to
 the whole return range (instance method below, start and end different), set
 `#limit` to `200` and `#sort` to `price`, and search. On 2026-10-09 one such
 search (ZRH–GIG, 18–22 Dec × 10–14 Jan) returned 200 itineraries across 15 of
-the 25 pairs in 23 seconds; the same pairs had taken 25 Google searches.
+the 25 date tuples in 23 seconds; the same tuples had taken 25 Google searches.
+
+**Unattended (BrowserAct).** `flightlist.py sweep` does the whole thing in a
+session you opened: types the airports with real keys, sets both pickers from
+the contract's window, the settings (`#type`, `#class`, `#currency`,
+`#checkedbags`, `#sort`, `#limit`, `#connections`, `#stops`), submits, waits
+for the cards, extracts them and records discover rows, one search per origin
+airport:
+
+```bash
+python3 <skill_dir>/scripts/flightlist.py sweep --session ffr-flightlist-1 --run <dir> \
+  --cabin economy --from ZRH+BSL+GVA --to BKK --top 1 --attended
+```
+
+It prints the tuples no card covered; `run_log.py jobs` prints one such
+command per open discover cell.
 
 Read every card with its hidden segment details (`textContent`, not
 `innerText`, so collapsed segments with dates and flight numbers are included):
@@ -32,12 +47,13 @@ python3 <skill_dir>/scripts/flightlist.py rows --run <run dir> cards.json \
   | python3 <skill_dir>/scripts/run_log.py add --run <run dir> --row -
 ```
 
-`rows` keeps the cheapest card within the duration cap for each date pair
+`rows` keeps the cheapest card within the duration cap for each date tuple
 (`--top N` for more), plus the cheapest card overall when it breaks the cap and
-is cheaper, and prints the pairs no card covered. The 200 cards are the
-cheapest 200 of the whole window, so expensive pairs can be missing: search
-again with the outbound range narrowed to the missing days, or confirm those
-pairs on Google (`gflights.py sweep --pairs …`). Cards that combine unrelated carriers (easyJet + Ryanair + GOL)
+is cheaper, and prints the tuples no card covered. Rows are `phase: discover`
+(`--phase exact` for an exact-date search) with both legs as `legs[0]` and
+`legs[1]`. The 200 cards are the cheapest 200 of the whole window, so expensive
+tuples can be missing: search again with the outbound range narrowed to the
+missing days, or confirm those tuples on Google (`gflights.py sweep --tuples …`). Cards that combine unrelated carriers (easyJet + Ryanair + GOL)
 are Kiwi combinations: the notes flag them as possible self-transfers, which
 the Kiwi fare page confirms.
 
@@ -48,8 +64,11 @@ shows the airline's own fare families for that itinerary with what each
 includes and the total with Kiwi's fees, before any passenger detail. For KLM
 ZRH–GIG 22 Dec / 12 Jan it showed `Light` CHF 1,555.26 (no checked bag),
 `Standard` CHF 1,923.08 (23 kg bag) and `Flex` CHF 2,131.25. That page is a
-completed quote: record the cheapest family that includes the requested bags
-with `quote_state: "completed"` and `baggage: "included"`. The FlightList card
+completed quote: `kiwi.py fare --session ffr-kiwi-1 --run <dir> --supersedes
+<list row id> <URL>` reads the families, picks the cheapest one that includes
+the requested bags and records it with `quote_state: "completed"` and
+`baggage: "included"`, superseding the list row (`kiwi.py parse` on a saved
+page text shows what it read). The FlightList card
 for the same itinerary, searched with one checked bag, said CHF 1,750.91,
 which matched neither family: a FlightList price is never the bag-inclusive
 total. Kiwi's own results URLs redirected to the home page in the same run;
@@ -127,8 +146,8 @@ segments) is in the card body. Aggregate the full list programmatically rather
 than scanning the rendered markdown.
 
 Parse every card's TWO duration values — the first `(\d+)h\s*(\d+)m` occurrence
-is the outbound elapsed, the second is the return elapsed — then apply the
-contract cap as `out_min < 1200 and ret_min < 1200` before ranking. The list's
+is leg 1's elapsed, the second is leg 2's — then apply the contract cap to
+each leg before ranking (`flightlist.py rows` does both). The list's
 cheapest rows frequently fail the return cap on long-haul routes (a cheap
 outbound under the cap can pair with a 29h40m return), so a raw price sort is
 not a qualified ranking. Skip cards whose price is missing rather than guessing.
@@ -151,4 +170,4 @@ expanded) and the `Book Flight` link.
 - A result is bookable only after the Kiwi handoff or the airline site
   completes it.
 
-Engine-specific notes (key events, eval, sessions): `browser-engines.md`.
+Engine-specific notes (key events, eval, sessions): `references/browser-engines.md`.

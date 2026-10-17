@@ -71,8 +71,9 @@ A deep link prefills the search form:
 never completed: the button kept spinning while the site's own search requests
 (`gql/v1 … SharedSearchContext…`) returned HTTP 403. There is no visible
 challenge, so check the network log instead of waiting (BrowserAct:
-`network requests --status 403`) and record `blocked` with the engine. The
-user's own browser may still work (one probe allowed on a higher rung).
+`network requests --status 403`) and record `blocked` with the engine. A
+stealth browser or the user's own browser may still work (one probe allowed
+per `source_ledger.py order --engine`).
 Qualify AF/KLM fares through the Kiwi fare page instead
 (`flightlist-browser.md`): it shows their Light / Standard / Flex families.
 

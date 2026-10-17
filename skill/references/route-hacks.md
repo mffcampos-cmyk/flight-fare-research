@@ -7,30 +7,34 @@ and a lead is never the pick.
 
 ## Which hacks apply
 
-`run_log.py init` creates one comparison per cabin for each permitted hack and
-marks the rest not applicable with a reason. Record hack rows with `"hack"`
-set; `run_log.py coverage` shows what is still open.
+Three hacks remain. Nearby departure airports, alternative arrival airports
+and multi-city itineraries are not hacks any more: they are airport groups and
+legs in the contract (`references/intake.md`), searched and ranked as baseline.
+
+`run_log.py init` creates one comparison per cabin for each hack switched on
+at intake (`hacks.split`, `hacks.open_jaw`, `hacks.stopover`) and marks the
+ones that cannot apply not applicable with a reason. Record hack rows with
+`"hack"` set; `run_log.py coverage` shows what is still open.
 
 | Hack (`hack`) | What to test | Needs |
 |---|---|---|
-| `split` | Outbound and return as separate one-way tickets, any airlines or sellers; compare the bag-qualified sum with the round trip | return trip |
-| `open_jaw` | Home → destination with return from (or to) another airport, plus the ground leg that closes the gap; both orientations | return trip |
-| `nearby_origin` | Round trips and one-ways from the nearby airports, plus the rail or flight to reach them | `positioning.allowed` and `nearby_origins` |
-| `alt_destination` | A regional gateway plus a protected or separately priced local leg, when elapsed time and bag handling stay acceptable | `alt_destinations` |
-| `stopover` | The carrier's stopover product, then the fallback below | requested by the user |
+| `split` | Leg 1 and leg 2 as separate one-way tickets, any airlines or sellers; compare the bag-qualified sum with the round trip | a return trip |
+| `open_jaw` | Return from or to another airport of the same group, plus the leg that closes the gap (a ticket, or `components.transfers` for rail); both orientations | a return trip and a second airport on either end |
+| `stopover` | The carrier's stopover product, then the fallback below | switched on by the user |
 
 Fare-family arbitrage (airline direct vs aggregator vs branded families) is part
-of qualification, not a separate hack: see `qualification.md`.
+of qualification, not a separate hack: see `references/qualification.md`.
 
-Record each tested combination as one row: every ticket it needs, all its legs,
-and the run's date pair (for example a split is one row with two one-way
-tickets). Rows for a different search are refused by `add`.
+Record each tested combination as one row: every ticket it needs, every flown
+leg, and the run's date tuple (a split is one row with two one-way tickets and
+two leg entries). Rows for a different search are refused by `add`.
 
 ## All-in and break-even
 
-All-in = tickets + bag fees for the requested bags + positioning (both ways) +
-unavoidable hotel nights + transfers. `run_log` sums the parts; a `null` part
-keeps the row a lead and counts as 0 only in its lower bound.
+All-in = tickets + bag fees for the requested bags + ground rows for nearby
+airports (both ways) + unavoidable hotel nights + transfers. `run_log` sums
+the parts; an unpriced part keeps the row a lead and counts as 0 only in its
+lower bound.
 
 When one part is unpriced, show the **break-even** instead of a total: the most
 that part can cost before the hack stops winning.
@@ -41,13 +45,13 @@ that part can cost before the hack stops winning.
 
 A cost the user estimates ("the train is about CHF 30") belongs in the message
 as their estimate next to the break-even. The recommendation stays the best
-qualified option until the part is priced on its seller's site.
+qualified option until a ground row from the operator's site exists.
 
 ## Timing and risk
 
-- A previous-day positioning trip or airport hotel changes the trip window and
-  any event buffer; it needs `positioning.overnight_ok` and goes in `hotel`.
-- Reject a return positioning leg that leaves no realistic time after the long
+- A previous-day ground leg or airport hotel changes the trip window and any
+  event buffer; it needs `overnight_ok` on that airport and goes in `hotel`.
+- Reject a return ground leg that leaves no realistic time after the long
   flight for immigration, baggage reclaim, terminal change and re-check; price
   a later connection or a hotel instead.
 - Check that an early first departure is reachable by the first train or bus
@@ -60,26 +64,27 @@ qualified option until the part is priced on its seller's site.
 
 ## Recording a hack row
 
-- **Rail or bus positioning** is an amount: `components.positioning` (both
-  ways), `null` until priced on the operator's site.
+- **Rail or bus to a nearby airport** is a ground row (`references/qualification.md`),
+  shared by every fare row from that airport.
 - **A positioning flight is a ticket**: add it to `tickets` with its own price,
   quote state and bag line (a separate ticket's bag allowance never covers
-  another). Keep `components.positioning: null` only for a part still unpriced,
-  such as the return positioning flight.
+  another), and its flown journey as `"part": 1` of that leg.
 - **Same-day self-transfer** (hub-first: fly ZRH→LIS, then LIS→GIG on another
-  ticket): record each direction from the home airport to the destination with
-  the whole elapsed time and `self_transfer: true`, so the duration cap applies
-  to the journey the traveller actually makes. Example: TAP ZRH 18:00 → LIS
-  20:00, then GOL LIS 23:35 → GIG 06:35 is 16h35 door to door; the earlier TAP
-  13:30 would have given more buffer but 21h05, over a 20-hour cap. With a
-  previous-day positioning flight and a hotel (`positioning.overnight_ok`), the
-  long-haul journey is the direction and the night goes in `components.hotel`.
-- **Stopover**: one `out` (or `ret`) entry per flown journey (ZRH→LIS, then
-  LIS→GIG three days later), each with its own duration; the stay is not
-  journey time. Hotel nights go in `components.hotel`.
-- **Open jaw from a Google multi-city search** shows only the first leg; the
-  row stays `return not selected` until the later legs are selected. A
-  domestic hop that closes the jaw is its own ticket.
+  ticket): record the leg as two parts, `{"leg": 1, "part": 1, "from": "ZRH",
+  "to": "LIS", …}` and `{"leg": 1, "part": 2, "from": "LIS", "to": "GIG",
+  "self_transfer": true, …}`, each with its own duration, so the cap applies
+  to each flown part and the self-transfer gate applies. Example: TAP ZRH
+  18:00 → LIS 20:00, then GOL LIS 23:35 → GIG 06:35; with a previous-day
+  positioning flight and a hotel (`overnight_ok`), the night goes in
+  `components.hotel`.
+- **Stopover**: one part per flown journey (ZRH→LIS as part 1, LIS→GIG three
+  days later as part 2), each with its own duration; the stay is not journey
+  time. Hotel nights go in `components.hotel`.
+- **Open jaw**: a row whose leg 2 airports differ from leg 1's (`GIG→ZRH` back
+  from `ZRH→GRU` out), plus the closing leg as a ticket or in
+  `components.transfers`. From a Google multi-city search only the first leg
+  shows: the row stays `leg 2 not selected` until the later legs are selected.
+- **Multi-city** is native: one entry per contract leg, `"leg": 1` to `N`.
 
 ## Searching hacks quickly
 
@@ -87,9 +92,11 @@ qualified option until the part is priced on its seller's site.
   (`gflights.py url --cabin economy BSL+GVA+MXP+MUC+FRA-GIG@… GIG-BSL+GVA+MXP+MUC+FRA@…`);
   each card names its airport. Search the hubs you could fly to first
   (`LIS+MAD+CDG+AMS`) the same way.
-- Split one-ways and multi-city legs open directly from `gflights.py url`.
+- Split one-ways and multi-city legs open directly from `gflights.py url`;
+  a multi-city tuple's legs come from `gflights.py sweep --tuples`.
 - Run hack searches on Google in one session while sellers are repriced in
-  another (`browser-engines.md`, parallel work).
+  another (`references/browser-engines.md`, parallel work; `run_log.py jobs`
+  lists the hack cells under the `ffr-hacks` job).
 - Price a hack's cheap part first and let `rank` prune: in the ZRH–GIG run the
   economy split (CHF 948 + 980) and TAP's stopover (CHF 2,744.75) were pruned
   automatically against the qualified CHF 1,923.08.
@@ -126,7 +133,7 @@ Leads from the web are ideas to price, never prices. Reprice every one on the
 exact dates, then add it as a row.
 
 0. **Which routes exist:** for each nearby or alternative airport, read its
-   FlightConnections page (`source-ladder.md`) to see which airlines fly
+   FlightConnections page (`references/source-ladder.md`) to see which airlines fly
    non-stop to the destination; price only those.
 1. **Broad, keyless:** one short web search per hack type, run in parallel:
    `<carrier> stopover program <hub>`, `fifth freedom flights <region> <destination>`,

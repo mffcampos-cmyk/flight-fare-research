@@ -40,20 +40,24 @@ repeated dates and every card (price, local times with dates, duration, stops,
 airlines and operator, departure and arrival airports, layovers, mixed-cabin
 label) as JSON.
 
-**Sweep many pairs unattended (BrowserAct).** Open your own session on the
-browser first (`browser-act --session ffr-gf browser open <browser id>
+**Sweep many tuples unattended (BrowserAct).** Open your own session on the
+browser first (`browser-act --session ffr-google-1 browser open <browser id>
 https://www.google.com/travel/flights`; never drive a session the user or
-another agent opened, `browser-engines.md`). One command then runs a search per
-cabin and date pair of the run, verifies each page, records the cheapest cards
-within the duration cap as list rows and stops at the first challenge:
+another agent opened, `references/browser-engines.md`). One command then runs
+a search per cabin and date tuple of the run (one date per leg, joined by
+`_`), verifies each page, records the cheapest cards within the duration cap
+as list rows for leg 1, and on a challenge applies the policy in
+`references/browser-engines.md` (`solve-captcha` once, then `remote-assist`
+with `--attended`), stopping when nothing clears it:
 
 ```bash
-python3 $G sweep --session ffr-gf --run <run dir> --cabins economy,business \
-  --pairs 2026-12-22_2027-01-12,2026-12-21_2027-01-13 --top 3 --pause 12
+python3 $G sweep --session ffr-google-1 --run <run dir> --cabins economy,business \
+  --destination BKK --tuples 2027-02-03_2027-02-17,2027-02-05_2027-02-19 --top 3 --pause 12 --attended
 ```
 
-Other engines: open the `url` output, read the page text, pipe it to `parse`,
-and add the rows with `run_log.py add` (it accepts a JSON array).
+`run_log.py jobs` prints these commands for the open confirm and baseline
+cells. Other engines: open the `url` output, read the page text, pipe it to
+`parse`, and add the rows with `run_log.py add` (it accepts a JSON array).
 
 **Spend Google searches on confirmation, not discovery.** On one network,
 about 90 Google Flights searches within a day were followed by HTTP 429 and a
@@ -131,7 +135,7 @@ is (it happened for a three-leg business multi-city ZRH–LIS–GIG–ZRH).
 
 Distinguish in-window results from teasers: the price grid header `from €X` and a card like `Travel Oct 4 – 12 for €819` describe OTHER date windows, not the queried contract. Only cards inside the results headings for the exact entered dates count as exact-date evidence.
 
-For multi-city results, the first card price is for the **entire trip**, but it is still only a first-leg choice: a row recorded from it has `return not selected` until you select every later leg. Enforce the duration cap on each separately flown journey, and wait for the final booking page before evaluating price or baggage. If the structure never returns a populated fare after an executed search, record it as “no published fare returned” rather than converting the constituent headline cards into a synthetic through fare.
+For multi-city results, the first card price is for the **entire trip**, but it is still only a first-leg choice: a row recorded from it has `leg 2 not selected` (and so on) until you select every later leg. Enforce the duration cap on each separately flown journey, and wait for the final booking page before evaluating price or baggage. If the structure never returns a populated fare after an executed search, record it as “no published fare returned” rather than converting the constituent headline cards into a synthetic through fare.
 
 Several airports on one end (`BSL+GVA+MXP+MUC+FRA-GIG@…`) return one list with each
 card's own departure airport; `parse` reports it in `from`.
@@ -142,8 +146,16 @@ card's own departure airport; `parse` reports it in `from`.
 populated page with `run_log.py add` as soon as it is read (the cheapest
 relevant cards as `list` rows, or an attempt row when the page did not
 populate). `run_log.py coverage` then shows which comparisons are still open;
-revisit shortlisted itineraries one by one to select the return and qualify
-baggage.
+revisit shortlisted itineraries one by one to select the later legs and
+qualify baggage.
+
+## Explore (regions)
+
+`gflights.py explore --region "Southeast Asia" --from ZRH --window 2027-02-01,2027-02-10`
+prints the Explore URL and the form steps. Explore ignores query parameters
+for regions, and no capture of its card text exists (the datacenter probe on
+2026-10-17 got the "unusual traffic" check), so the destination cards are read
+by hand and recorded as discover rows: `references/discovery.md`.
 
 A page that never showed a priced card may be retried once with a longer wait.
 A page that showed a bot check, CAPTCHA, `unusual traffic`, HTTP 403/429 or a

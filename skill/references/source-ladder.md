@@ -6,7 +6,7 @@ Choose sources by evidentiary value, not by brand count. A populated exact-date 
 
 Check available connectors first: which are present, connected, authorized, support exact-date flight shopping, and what coverage/currency/baggage/freshness they expose. Kiwi.com, Expedia, lastminute.com are possible integrations, not installed dependencies; never assume connected. Prefer a capable connected connector; a blocked public site does not establish connector failure. Record backend relationships, not app-name counts.
 
-Which comparisons a quick or full run needs is set at intake (`intake.md`) and tracked by `run_log.py coverage`. The quick path uses Google Flights (or a connected search), airline-direct qualification and one independent cross-check; FlightList, ITA Matrix and the hack matrix belong to the full path.
+Which comparisons a quick or full run needs is set at intake (`references/intake.md`) and tracked by `run_log.py coverage`. The quick path uses Google Flights (or a connected search), airline-direct qualification and one independent cross-check; FlightList, ITA Matrix and the hacks belong to the full path. A region destination starts with discovery (`references/discovery.md`): FlightList range searches, Google Flights Explore (ledger id `google-explore`, family `google`) and FlightConnections.
 
 ## Default no-credential ladder
 
@@ -14,11 +14,11 @@ Which comparisons a quick or full run needs is set at intake (`intake.md`) and t
 
 Use `https://www.flightlist.io/` when the task has many date combinations, nearby gateways, cabin classes, a duration cap, or checked-bag requirements. Its rendered form supports date ranges, return trips, economy/premium/business/first, currencies, stop limits, maximum duration, self-transfer inclusion/exclusion, and 0–2 checked bags.
 
-Form settings, date pickers, result parsing and limitations: `flightlist-browser.md`. FlightList hands booking off to Kiwi, so it is one Kiwi-backed discovery family; its checked-bag filter is a candidate signal, not baggage proof.
+Form settings, date pickers, result parsing, the unattended `flightlist.py sweep` and limitations: `references/flightlist-browser.md`. FlightList hands booking off to Kiwi, so it is one Kiwi-backed discovery family; its checked-bag filter is a candidate signal, not baggage proof. The Kiwi fare page it links to is the reprice (`kiwi.py fare`).
 
 ### 2. Google Flights: exact grid and completion
 
-Use Google Flights to reproduce exact date pairs, select an outbound and a qualifying return, identify mixed cabins and airport changes, and capture the completed booking-provider card. Follow `google-flights-browser.md`.
+Use Google Flights to confirm exact date tuples (`gflights.py sweep --tuples`), select every leg, identify mixed cabins and airport changes, and capture the completed booking-provider card. Follow `references/google-flights-browser.md`. Its daily allowance makes it a confirmation source, not a discovery one.
 
 ### 3. eDreams: OTA cross-check (verify fresh each run)
 
@@ -38,7 +38,7 @@ If the airline engine cannot reconstruct an interline itinerary, retain the comp
 
 ### 5. ITA Matrix: independent fare/schedule cross-check
 
-Use Matrix for fare and schedule corroboration, not booking or baggage. Follow `ita-matrix-browser.md`. If its Angular date controls do not commit or the results shell remains empty, record the failure and continue instead of treating a recent-search card as current evidence.
+Use Matrix for fare and schedule corroboration, not booking or baggage. Follow `references/ita-matrix-browser.md`. If its Angular date controls do not commit or the results shell remains empty, record the failure and continue instead of treating a recent-search card as current evidence.
 
 ### 6. Opportunistic OTA cross-checks
 
@@ -49,6 +49,16 @@ Do not rank an OTA teaser above airline-direct unless the exact itinerary surviv
 ## Route discovery (no fares)
 
 **FlightConnections** (`https://www.flightconnections.com/flights-from-<city>-<iata>`, ledger role `routes`) lists every non-stop destination and airline from an airport. Use it to choose nearby-airport and open-jaw candidates (which airlines fly non-stop from BSL or GVA to the destination) before pricing them elsewhere. It never prices a fare. Worked headless on 2026-10-08. The arrival-side page (`/flights-to-<city>-<iata>`) lists every airport and airline with a non-stop to the destination; on 2026-10-08 a direct fetch returned an empty 202, while the text reader (`curl -s "https://r.jina.ai/<URL>"`) returned the full list.
+
+## Asia and long-haul candidates (untested until probed)
+
+For Southeast Asia the sellers that matter are in the ledger as candidates:
+Qatar Airways, Emirates, Turkish Airlines (each with a stopover product),
+Singapore Airlines, Thai Airways, AirAsia and Scoot (intra-Asia low-cost
+legs), and Trip.com. Most airline sites blocked a headless probe
+(`references/historical-observations.md`); probe them on the stealth browser
+or the user's own browser (`source_ledger.py order --engine …`), and write a
+recipe only for a flow you completed.
 
 ## Partially usable sources (pragmatic tier)
 
@@ -61,7 +71,7 @@ Do not keep a hand-written status table here. Live per-source state (ok / partia
 
 Untested sources stay untested until probed.
 
-Make one attempt per source per run and follow the challenge steps in `browser-engines.md` when a site blocks you. Cite only populated exact-date pages, never indexed snippets. Re-test on a future run because accessibility changes; a homepage loading today does not mean its search flow works.
+Make one attempt per source per run and follow the challenge steps in `references/browser-engines.md` when a site blocks you. Cite only populated exact-date pages, never indexed snippets. Re-test on a future run because accessibility changes; a homepage loading today does not mean its search flow works.
 
 ## Credentialed official APIs
 
